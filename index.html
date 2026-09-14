@@ -133,6 +133,28 @@
   .content { padding: 18px 16px 8px; }
   .section-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--text-secondary); font-weight: 700; margin: 0 0 10px; display: flex; justify-content: space-between; align-items: center; }
   .section-label .toggle { text-transform: none; letter-spacing: 0; color: var(--terracotta-dark); font-weight: 700; cursor: pointer; font-size: 12px; }
+  .settings-toggle-row { display: flex; justify-content: flex-end; margin: -6px 0 14px; }
+  .settings-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: white;
+    border: 1.5px solid var(--navy);
+    border-radius: 10px;
+    padding: 10px 14px;
+    color: var(--navy);
+    font-family: "Century Gothic", "Apple Gothic", AppleGothic, sans-serif;
+    font-size: 12.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    cursor: pointer;
+    box-shadow: 2px 3px 6px rgba(0,17,44,0.14);
+    transition: box-shadow 0.1s ease, transform 0.1s ease;
+  }
+  .settings-toggle-btn:active { transform: translate(1px, 1.5px); box-shadow: 0.5px 1px 1.5px rgba(0,17,44,0.14); }
+  .settings-toggle-btn svg { flex-shrink: 0; }
+  #settings-toggle-chevron { color: var(--terracotta-dark); font-size: 14px; }
 
   .field { margin-bottom: 14px; }
   .field label { display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px; }
@@ -236,6 +258,13 @@
 
   .vendor-input-wrap { position: relative; flex: 1; }
   .vendor-input-wrap input { width: 100%; padding-right: 34px; }
+  .clearable-input-wrap { position: relative; }
+  .clearable-input-wrap input { width: 100%; padding-right: 34px; -moz-appearance: textfield; }
+  .clearable-input-wrap input::-webkit-outer-spin-button,
+  .clearable-input-wrap input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
   .input-clear-btn {
     position: absolute;
     top: 50%;
@@ -289,7 +318,7 @@
   .photo-btn-row { display: flex; gap: 8px; margin-bottom: 8px; }
   .photo-upload-box {
     position: relative;
-    width: 100%;
+    width: 110px;
     height: 110px;
     border: 1.5px dashed var(--border);
     border-radius: 12px;
@@ -884,7 +913,17 @@
         <button type="button" class="category-btn" id="cat-btn-cushions" onclick="setCategory('cushions')">Cushions</button>
       </div>
 
-      <p class="section-label">Quote details <span class="toggle" onclick="toggleSettings()" id="settings-toggle">Landed Cost Settings &#9662;</span></p>
+      <p class="section-label">Quote details</p>
+      <div class="settings-toggle-row">
+        <button type="button" class="settings-toggle-btn" onclick="toggleSettings()" id="settings-toggle">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+          <span id="settings-toggle-label">Landed Cost Settings</span>
+          <span id="settings-toggle-chevron">&#9662;</span>
+        </button>
+      </div>
 
       <div class="settings-panel" id="settings-panel">
         <div class="settings-sub">Duty &amp; freight (Curtains)</div>
@@ -924,7 +963,12 @@
             <input type="number" id="s-container-panels" step="1" value="16000">
           </div>
         </div>
-        <div class="ref-box">Suggested freight/panel: <b id="ref-freight">$0.67</b> &mdash; update the field above if this differs from your rate.</div>
+        <div class="ref-box">
+          Suggested freight/panel: <b id="ref-freight">$0.67</b> &mdash; this does not update the Freight field above automatically.
+          <div class="field-row" style="margin-top:8px;">
+            <button type="button" class="scan-btn" style="width:100%;" onclick="applyFreightReference()">Apply to Freight field</button>
+          </div>
+        </div>
 
         <div class="settings-sub">Exchange &amp; warehousing</div>
         <div class="field-row">
@@ -987,16 +1031,30 @@
       </div>
       <div class="field">
         <label for="item">Item / style #</label>
-        <input type="text" id="item" placeholder="e.g. YH2025F">
+        <div style="display:flex; gap:8px;">
+          <div class="clearable-input-wrap" style="flex:1;">
+            <input type="text" id="item" placeholder="e.g. YH2025F" oninput="toggleClearBtn(this)">
+            <button type="button" class="input-clear-btn" onclick="clearInputField(this)" style="display:none;">&#10005;</button>
+          </div>
+          <button type="button" class="scan-btn" onclick="triggerItemQRScan()" id="item-qr-btn">Scan QR</button>
+        </div>
+        <input type="file" id="item-qr-input" accept="image/*" capture="environment" style="display:none;" onchange="handleItemQRScanned(event)">
+        <div class="field-hint" id="item-qr-status"></div>
       </div>
       <div class="field-row">
         <div class="field">
           <label for="price" id="price-label">Fabric price ($/m)</label>
-          <input type="number" id="price" step="0.01" value="2.50" inputmode="decimal">
+          <div class="clearable-input-wrap">
+            <input type="number" id="price" step="0.01" value="2.50" inputmode="decimal" oninput="toggleClearBtn(this)">
+            <button type="button" class="input-clear-btn" onclick="clearInputField(this)" style="display:flex;">&#10005;</button>
+          </div>
         </div>
         <div class="field" id="width-field">
           <label for="width">Fabric width (cm)</label>
-          <input type="number" id="width" step="1" value="305" inputmode="decimal">
+          <div class="clearable-input-wrap">
+            <input type="number" id="width" step="1" value="305" inputmode="decimal" oninput="toggleClearBtn(this)">
+            <button type="button" class="input-clear-btn" onclick="clearInputField(this)" style="display:flex;">&#10005;</button>
+          </div>
         </div>
       </div>
 
@@ -1032,6 +1090,8 @@
               <option value="Linen">Linen</option>
               <option value="Velvet">Velvet</option>
               <option value="Cotton Blend">Cotton Blend</option>
+              <option value="Chenille">Chenille</option>
+              <option value="Outdoor">Outdoor</option>
             </select>
             <div class="field-hint">Placeholder list &mdash; confirm full options.</div>
           </div>
@@ -1182,11 +1242,14 @@
     <div class="content">
       <p class="section-label">Suppliers</p>
 
-      <div class="field-row">
-        <div class="field" style="flex:1;">
-          <input type="text" id="new-supplier-name" placeholder="Add a supplier name">
+      <div class="field-row" style="gap:14px; margin-bottom:18px;">
+        <div class="field" style="flex:1; margin-bottom:0;">
+          <div class="clearable-input-wrap">
+            <input type="text" id="new-supplier-name" placeholder="Add a supplier name" oninput="toggleClearBtn(this)">
+            <button type="button" class="input-clear-btn" onclick="clearInputField(this)" style="display:none;">&#10005;</button>
+          </div>
         </div>
-        <button type="button" class="btn btn-clear-partial" style="flex:none; padding:0 16px;" onclick="addManualSupplier()">Add</button>
+        <button type="button" class="btn btn-clear-partial" style="flex:none; padding:0 24px; min-height:46px;" onclick="addManualSupplier()">Add</button>
       </div>
 
       <input type="file" id="supplier-scan-input" accept="image/*" capture="environment" style="display:none;" onchange="handleSupplierCardScanned(event)">
@@ -1489,9 +1552,9 @@ function fmt(n) { return "$" + n.toLocaleString(undefined, { minimumFractionDigi
 // ---------------------------------------------------------------
 function toggleSettings() {
   const panel = document.getElementById("settings-panel");
-  const label = document.getElementById("settings-toggle");
+  const chevron = document.getElementById("settings-toggle-chevron");
   const open = panel.classList.toggle("open");
-  label.innerHTML = "Landed Cost Settings " + (open ? "&#9652;" : "&#9662;");
+  chevron.innerHTML = open ? "&#9652;" : "&#9662;";
 }
 
 const SETTINGS_IDS = ["s-duty", "s-duty-shell", "s-duty-filled", "s-freight", "s-container-cost", "s-container-panels", "s-fx", "s-wh", "s-sell-gm", "s-msrp-gm", "s-bank-markup"];
@@ -1520,6 +1583,17 @@ function updateFreightReference() {
   document.getElementById("ref-freight").textContent = fmt(cost / panels);
 }
 
+function applyFreightReference() {
+  const cost = parseFloat(document.getElementById("s-container-cost").value) || 0;
+  const panels = parseFloat(document.getElementById("s-container-panels").value) || 1;
+  const perPanel = cost / panels;
+  document.getElementById("s-freight").value = perPanel.toFixed(4);
+  saveSettings();
+  renderPriceCards();
+  renderPriceTable();
+  showToast("Freight field updated to " + fmt(perPanel) + "/panel.", "success");
+}
+
 // ---------------------------------------------------------------
 // Bank of Canada official FX rate (mid-market reference) + bank markup
 // ---------------------------------------------------------------
@@ -1533,7 +1607,7 @@ async function fetchBocRate() {
   statusEl.textContent = "Fetching\u2026";
 
   try {
-    const resp = await fetch("https://www.bankofcanada.ca/valet/observations/FXUSDCAD/json?recent=1");
+    const resp = await fetch("https://www.bankofcanada.ca/valet/observations/FXUSDCAD/json?recent=1&_=" + Date.now(), { cache: "no-store" });
     if (!resp.ok) throw new Error("HTTP " + resp.status);
     const data = await resp.json();
     const obs = data && data.observations && data.observations[0];
@@ -1694,9 +1768,9 @@ function updatePriceLabel() {
   if (selectedCategory === "cushions") {
     const basis = document.getElementById("cushion-quote-basis").value;
     if (basis === "Shell") {
-      label.textContent = "Shell price ($/unit)";
+      label.textContent = "Shell price ($/pc)";
     } else if (basis === "Finished Cushion") {
-      label.textContent = "Finished cushion price ($/unit)";
+      label.textContent = "Finished cushion price ($/pc)";
     } else {
       label.textContent = "Fabric price ($/m)";
     }
@@ -1828,6 +1902,87 @@ function ensureTesseractLoaded() {
     document.head.appendChild(script);
   });
   return tesseractLoadPromise;
+}
+
+// ---------------------------------------------------------------
+// Item / Style # QR code scan (loads jsQR on demand)
+// ---------------------------------------------------------------
+let jsQRLoadPromise = null;
+
+function ensureJsQRLoaded() {
+  if (typeof window.jsQR !== "undefined") return Promise.resolve();
+  if (jsQRLoadPromise) return jsQRLoadPromise;
+  jsQRLoadPromise = new Promise(function(resolve, reject) {
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js";
+    script.onload = function() { resolve(); };
+    script.onerror = function() { reject(new Error("Could not load QR-scanning library")); };
+    document.head.appendChild(script);
+  });
+  return jsQRLoadPromise;
+}
+
+function triggerItemQRScan() {
+  document.getElementById("item-qr-input").click();
+}
+
+async function handleItemQRScanned(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById("item-qr-status");
+  const btn = document.getElementById("item-qr-btn");
+  btn.disabled = true;
+  statusEl.textContent = "Loading QR scanner\u2026";
+
+  try {
+    await ensureJsQRLoaded();
+    statusEl.textContent = "Reading QR code\u2026";
+
+    const dataUrl = await new Promise(function(resolve, reject) {
+      const reader = new FileReader();
+      reader.onload = function() { resolve(reader.result); };
+      reader.onerror = function() { reject(new Error("Could not read file")); };
+      reader.readAsDataURL(file);
+    });
+
+    const img = await new Promise(function(resolve, reject) {
+      const image = new Image();
+      image.onload = function() { resolve(image); };
+      image.onerror = function() { reject(new Error("Could not decode image")); };
+      image.src = dataUrl;
+    });
+
+    const maxDim = 1200;
+    let w = img.width, h = img.height;
+    if (w > maxDim || h > maxDim) {
+      const scale = maxDim / Math.max(w, h);
+      w = Math.round(w * scale);
+      h = Math.round(h * scale);
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0, w, h);
+    const imageData = ctx.getImageData(0, 0, w, h);
+
+    const result = window.jsQR(imageData.data, imageData.width, imageData.height);
+
+    if (result && result.data) {
+      document.getElementById("item").value = result.data;
+      toggleClearBtn(document.getElementById("item"));
+      statusEl.textContent = "QR code scanned successfully.";
+      showToast("Item / style # filled from QR code.", "success");
+    } else {
+      statusEl.textContent = "No QR code found \u2014 try again with the code centered and in focus.";
+      showToast("No QR code found in that photo.", "error");
+    }
+  } catch (e) {
+    statusEl.textContent = "Scan failed \u2014 enter the item # manually.";
+    showToast("Could not scan the QR code. Check your connection and try again.", "error");
+  }
+  btn.disabled = false;
+  event.target.value = "";
 }
 
 function triggerScanCard() {
@@ -2028,6 +2183,8 @@ async function saveQuote() {
 function clearPriceWidth() {
   document.getElementById("price").value = "";
   document.getElementById("width").value = "";
+  toggleClearBtn(document.getElementById("price"));
+  toggleClearBtn(document.getElementById("width"));
   renderPriceCards();
   renderPriceTable();
 }
@@ -2037,8 +2194,11 @@ function clearAll() {
     document.getElementById("vendor").value = "";
     updateVendorClearBtn();
     document.getElementById("item").value = "";
+    toggleClearBtn(document.getElementById("item"));
     document.getElementById("price").value = "";
+    toggleClearBtn(document.getElementById("price"));
     document.getElementById("width").value = "";
+    toggleClearBtn(document.getElementById("width"));
     document.getElementById("notes").value = "";
     document.getElementById("scan-status").textContent = "";
     selectedCurtainType = null;
@@ -2087,8 +2247,10 @@ async function loadQuoteForEdit(id) {
   document.getElementById("vendor").value = (entry.vendor && entry.vendor !== "(no vendor)") ? entry.vendor : "";
   updateVendorClearBtn();
   document.getElementById("item").value = entry.item || "";
+  toggleClearBtn(document.getElementById("item"));
   document.getElementById("notes").value = entry.notes || "";
   document.getElementById("price").value = (typeof entry.fabricPrice === "number") ? entry.fabricPrice : "";
+  toggleClearBtn(document.getElementById("price"));
 
   if (entry.category === "cushions") {
     document.getElementById("cushion-quote-basis").value = entry.cushionQuoteBasis || "";
@@ -2109,6 +2271,7 @@ async function loadQuoteForEdit(id) {
       document.getElementById("width").value = "";
       showToast("Original fabric price/width weren\u2019t saved with this quote \u2014 please re-enter them.", "error");
     }
+    toggleClearBtn(document.getElementById("width"));
     selectedCurtainType = entry.curtainType || null;
     document.querySelectorAll("#curtain-type-group .chip").forEach(function(btn) {
       btn.classList.toggle("selected", btn.textContent === selectedCurtainType);
@@ -2798,11 +2961,22 @@ function sortAndFilterQuotes(list) {
 function buildQuoteDetailHtml(entry) {
   if (entry.category === "cushions") {
     let detailHtml = '<div class="log-date-full">Saved ' + entry.date + '</div>';
+
+    let priceLabel = "Fabric price";
+    let priceUnit = "/m";
+    if (entry.cushionQuoteBasis === "Shell") {
+      priceLabel = "Shell price";
+      priceUnit = "/pc";
+    } else if (entry.cushionQuoteBasis === "Finished Cushion") {
+      priceLabel = "Finished cushion price";
+      priceUnit = "/pc";
+    }
+
     const rows = [
       ["Quoted as", entry.cushionQuoteBasis],
       ["Fabric type", entry.cushionFabricType],
       ["Cushion size", CUSHION_SIZE_LABELS[entry.cushionSize] || entry.cushionSize],
-      ["Fabric price", (typeof entry.fabricPrice === "number") ? fmt(entry.fabricPrice) + "/m" : ""],
+      [priceLabel, (typeof entry.fabricPrice === "number") ? fmt(entry.fabricPrice) + priceUnit : ""],
       ["Fill type", entry.cushionFillType],
       ["Fill weight", (typeof entry.cushionFillWeight === "number") ? entry.cushionFillWeight + " g" : ""],
       ["Closure type", entry.cushionClosureType],
@@ -3041,6 +3215,26 @@ let cachedSuppliers = [];
 async function refreshSupplierCache() {
   const raw = await storageGet("nextex_suppliers");
   try { cachedSuppliers = raw ? JSON.parse(raw) : []; } catch (e) { cachedSuppliers = []; }
+}
+
+// ---------------------------------------------------------------
+// Generic clearable text input (X button appears once there's text)
+// ---------------------------------------------------------------
+function toggleClearBtn(input) {
+  const btn = input.nextElementSibling;
+  if (btn && btn.classList.contains("input-clear-btn")) {
+    btn.style.display = input.value ? "flex" : "none";
+  }
+}
+
+function clearInputField(btn) {
+  const input = btn.previousElementSibling;
+  if (!input) return;
+  input.value = "";
+  btn.style.display = "none";
+  input.focus();
+  input.dispatchEvent(new Event("input"));
+  input.dispatchEvent(new Event("change"));
 }
 
 function updateVendorClearBtn() {
