@@ -926,59 +926,123 @@
       </div>
 
       <div class="settings-panel" id="settings-panel">
-        <div class="settings-sub">Duty &amp; freight (Curtains)</div>
-        <div class="field-row">
-          <div class="field">
-            <label for="s-duty">Duty (%)</label>
-            <input type="number" id="s-duty" step="0.1" value="18">
+        <div id="settings-curtain-group">
+          <div class="settings-sub">Duty &amp; freight (Curtains)</div>
+          <div class="field-row">
+            <div class="field">
+              <label for="s-duty">Duty (%)</label>
+              <input type="number" id="s-duty" step="0.1" value="18">
+            </div>
+            <div class="field">
+              <label for="s-freight">Freight ($/panel)</label>
+              <input type="number" id="s-freight" step="0.01" value="0.55">
+            </div>
           </div>
-          <div class="field">
-            <label for="s-freight">Freight ($/panel)</label>
-            <input type="number" id="s-freight" step="0.01" value="0.55">
-          </div>
-        </div>
-        <div class="field-hint">Freight doubles automatically for 37" pair rows.</div>
+          <div class="field-hint">Freight doubles automatically for 37" pair rows.</div>
 
-        <div class="settings-sub">Duty (Cushions) &mdash; varies by "Quoted As"</div>
-        <div class="field-row">
-          <div class="field">
-            <label for="s-duty-shell">Shell duty (%)</label>
-            <input type="number" id="s-duty-shell" step="0.1" value="14">
+          <div class="settings-sub">Freight reference calculator (Curtains)</div>
+          <div class="field-row">
+            <div class="field">
+              <label for="s-container-cost">Container cost ($)</label>
+              <input type="number" id="s-container-cost" step="1" value="10700">
+            </div>
+            <div class="field">
+              <label for="s-container-panels">Panels / container</label>
+              <input type="number" id="s-container-panels" step="1" value="16000">
+            </div>
           </div>
-          <div class="field">
-            <label for="s-duty-filled">Finished cushion duty (%)</label>
-            <input type="number" id="s-duty-filled" step="0.1" value="18">
+          <div class="ref-box">
+            Suggested freight/panel: <b id="ref-freight">$0.67</b> &mdash; this does not update the Freight field above automatically.
+            <div class="field-row" style="margin-top:8px;">
+              <button type="button" class="scan-btn" style="width:100%;" onclick="applyFreightReference()">Apply to Freight field</button>
+            </div>
           </div>
-        </div>
-        <div class="field-hint">14% applies to unfilled shells; 18% applies to filled/finished cushions entering Canada. Not yet wired into a calculation &mdash; saved here for when the cushion costing formula is built.</div>
 
-        <div class="settings-sub">Freight reference calculator</div>
-        <div class="field-row">
-          <div class="field">
-            <label for="s-container-cost">Container cost ($)</label>
-            <input type="number" id="s-container-cost" step="1" value="10700">
-          </div>
-          <div class="field">
-            <label for="s-container-panels">Panels / container</label>
-            <input type="number" id="s-container-panels" step="1" value="16000">
-          </div>
-        </div>
-        <div class="ref-box">
-          Suggested freight/panel: <b id="ref-freight">$0.67</b> &mdash; this does not update the Freight field above automatically.
-          <div class="field-row" style="margin-top:8px;">
-            <button type="button" class="scan-btn" style="width:100%;" onclick="applyFreightReference()">Apply to Freight field</button>
+          <div class="settings-sub">Warehousing (Curtains)</div>
+          <div class="field-row">
+            <div class="field">
+              <label for="s-wh">Warehousing (CAD/panel)</label>
+              <input type="number" id="s-wh" step="0.01" value="1.50">
+            </div>
           </div>
         </div>
 
-        <div class="settings-sub">Exchange &amp; warehousing</div>
+        <div id="settings-cushion-group" style="display:none;">
+          <div class="settings-sub">Duty (Cushions) &mdash; varies by "Quoted As"</div>
+          <div class="field-row">
+            <div class="field">
+              <label for="s-duty-shell">Shell duty (%)</label>
+              <input type="number" id="s-duty-shell" step="0.1" value="14">
+            </div>
+            <div class="field">
+              <label for="s-duty-filled">Finished cushion duty (%)</label>
+              <input type="number" id="s-duty-filled" step="0.1" value="18">
+            </div>
+          </div>
+          <div class="field-hint">14% applies to unfilled shells; 18% applies to filled/finished cushions entering Canada.</div>
+
+          <div class="settings-sub">Cushion fabric-basis build-up (factory add-ons)</div>
+          <div class="field-row">
+            <div class="field">
+              <label for="s-cushion-waste">Waste (%)</label>
+              <input type="number" id="s-cushion-waste" step="0.1" value="2">
+            </div>
+            <div class="field">
+              <label for="s-cushion-labor">Labor ($/shell)</label>
+              <input type="number" id="s-cushion-labor" step="0.01" value="0.65">
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="s-cushion-factory-profit">Factory profit (%)</label>
+              <input type="number" id="s-cushion-factory-profit" step="0.1" value="10">
+            </div>
+            <div class="field">
+              <label for="s-cushion-fringe-cost">Fringe cost ($/shell)</label>
+              <input type="number" id="s-cushion-fringe-cost" step="0.01" value="0.30">
+            </div>
+          </div>
+          <div class="field-hint">Fringe cost is a placeholder pending factory confirmation. Applied in order: fabric cost &times; (1 + waste%), + labor + decorative (Piping/Flange by size, Fringe flat), &times; (1 + profit%) = shell price (USD/pc), which then goes through Shell duty above.</div>
+
+          <div class="settings-sub">Freight (Cushions)</div>
+          <div class="field-row">
+            <div class="field">
+              <label for="s-cushion-freight">Freight ($/shell)</label>
+              <input type="number" id="s-cushion-freight" step="0.001" value="0.18">
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="s-cushion-container-cost">Container cost ($)</label>
+              <input type="number" id="s-cushion-container-cost" step="1" value="10750">
+            </div>
+            <div class="field">
+              <label for="s-cushion-container-shells">Shells / container</label>
+              <input type="number" id="s-cushion-container-shells" step="1" value="60000">
+            </div>
+          </div>
+          <div class="ref-box">
+            Suggested freight/shell: <b id="ref-cushion-freight">$0.18</b> &mdash; this does not update the Freight field above automatically.
+            <div class="field-row" style="margin-top:8px;">
+              <button type="button" class="scan-btn" style="width:100%;" onclick="applyCushionFreightReference()">Apply to Freight field</button>
+            </div>
+          </div>
+
+          <div class="settings-sub">Warehousing (Cushions)</div>
+          <div class="field-row">
+            <div class="field">
+              <label for="s-cushion-wh">Warehousing (CAD/shell)</label>
+              <input type="number" id="s-cushion-wh" step="0.01" value="0.15">
+            </div>
+          </div>
+          <div class="field-hint">$0.15/shell, as provided &mdash; treat as provisional until finalized.</div>
+        </div>
+
+        <div class="settings-sub">Exchange rate <span style="font-weight:400; text-transform:none; letter-spacing:0; color:var(--text-secondary); font-size:11px;">(shared by both categories)</span></div>
         <div class="field-row">
           <div class="field">
             <label for="s-fx">FX rate (USD&#8594;CAD) &mdash; used in calculations</label>
             <input type="number" id="s-fx" step="0.001" value="1.40">
-          </div>
-          <div class="field">
-            <label for="s-wh">Warehousing (CAD/panel)</label>
-            <input type="number" id="s-wh" step="0.01" value="1.50">
           </div>
         </div>
 
@@ -1000,7 +1064,7 @@
           <div class="field-hint">Big 5 Canadian banks typically mark up 2.5&ndash;3.5% over the mid-market rate for retail conversions. Set this to whatever your actual bank/account charges, then tap Apply.</div>
         </div>
 
-        <div class="settings-sub">Margins</div>
+        <div class="settings-sub">Margins <span style="font-weight:400; text-transform:none; letter-spacing:0; color:var(--text-secondary); font-size:11px;">(shared by both categories)</span></div>
         <div class="field-row">
           <div class="field">
             <label for="s-sell-gm">Sell price GM (%)</label>
@@ -1072,13 +1136,38 @@
       <div id="cushion-fields" style="display:none;">
         <div class="field">
           <label for="cushion-quote-basis">Quoted as</label>
-          <select id="cushion-quote-basis" onchange="updatePriceLabel()">
+          <select id="cushion-quote-basis" onchange="updatePriceLabel(); renderCushionPrice();">
             <option value="">Select&#8230;</option>
             <option value="Fabric">Fabric</option>
             <option value="Shell">Shell</option>
             <option value="Finished Cushion">Finished Cushion</option>
           </select>
           <div class="field-hint">Is this price for raw fabric by the meter, a finished shell/cover, or a fully filled cushion quoted by the factory?</div>
+        </div>
+        <div class="field">
+          <label for="cushion-fabric-width">Fabric width (cm)</label>
+          <input type="number" id="cushion-fabric-width" step="1" value="145" inputmode="decimal" oninput="renderCushionPrice()">
+          <div class="field-hint">Standard is 145cm. Some qualities run wider (e.g. 280cm) for better yield.</div>
+        </div>
+        <div class="field">
+          <label>Fabric construction</label>
+          <div class="chip-group" id="cushion-construction-group">
+            <button type="button" class="chip selected" onclick="setCushionConstruction('Back to Back')">Back to Back</button>
+            <button type="button" class="chip" onclick="setCushionConstruction('A/B Side')">A/B Side</button>
+          </div>
+          <div class="field-hint">Back to Back: same fabric both sides. A/B Side: different fabric front &amp; back.</div>
+        </div>
+        <div id="cushion-back-fabric-fields" style="display:none;">
+          <div class="field-row">
+            <div class="field">
+              <label for="cushion-back-fabric-price">Back fabric price ($/m)</label>
+              <input type="number" id="cushion-back-fabric-price" step="0.01" inputmode="decimal" oninput="renderCushionPrice()">
+            </div>
+            <div class="field">
+              <label for="cushion-back-fabric-width">Back fabric width (cm)</label>
+              <input type="number" id="cushion-back-fabric-width" step="1" value="145" inputmode="decimal" oninput="renderCushionPrice()">
+            </div>
+          </div>
         </div>
         <div class="field-row">
           <div class="field">
@@ -1097,13 +1186,15 @@
           </div>
           <div class="field">
             <label for="cushion-size">Cushion size</label>
-            <select id="cushion-size">
+            <select id="cushion-size" onchange="renderCushionPrice()">
               <option value="">Select&#8230;</option>
               <option value="18x18">18&quot; x 18&quot; (45 x 45 cm)</option>
               <option value="20x20">20&quot; x 20&quot; (50 x 50 cm)</option>
               <option value="22x22">22&quot; x 22&quot; (55 x 55 cm)</option>
               <option value="24x24">24&quot; x 24&quot; (60 x 60 cm)</option>
               <option value="16x24">16&quot; x 24&quot; (41 x 61 cm)</option>
+              <option value="14x22">14&quot; x 22&quot; (36 x 56 cm)</option>
+              <option value="14x20">14&quot; x 20&quot; (36 x 51 cm)</option>
               <option value="lumbar12x20">12&quot; x 20&quot; Lumbar (30 x 50 cm)</option>
             </select>
           </div>
@@ -1180,12 +1271,8 @@
       </div>
 
       <div id="cushion-price-section" style="display:none;">
-        <p class="section-label">Price by size</p>
-        <div class="ref-box" style="text-align:center; padding:24px 16px;">
-          <div style="font-size:24px; margin-bottom:8px;">&#128717;</div>
-          <div style="font-weight:700; color:var(--navy); margin-bottom:4px;">Cushion pricing formula not built yet</div>
-          <div>Fields are ready and will save with your quote &mdash; the fabric, fill, closure, and decorative-feature cost logic comes next.</div>
-        </div>
+        <p class="section-label">Cushion price</p>
+        <div id="cushion-price-output"></div>
       </div>
     </div>
   </div>
@@ -1496,6 +1583,14 @@ function priceUsdPerPanel(width, length, price, quotedWidth, isPair) {
 function getSettings() {
   return {
     duty: parseFloat(document.getElementById("s-duty").value) || 0,
+    dutyShell: parseFloat(document.getElementById("s-duty-shell").value) || 0,
+    dutyFilled: parseFloat(document.getElementById("s-duty-filled").value) || 0,
+    cushionWaste: parseFloat(document.getElementById("s-cushion-waste").value) || 0,
+    cushionLabor: parseFloat(document.getElementById("s-cushion-labor").value) || 0,
+    cushionFactoryProfit: parseFloat(document.getElementById("s-cushion-factory-profit").value) || 0,
+    cushionFringeCost: parseFloat(document.getElementById("s-cushion-fringe-cost").value) || 0,
+    cushionFreight: parseFloat(document.getElementById("s-cushion-freight").value) || 0,
+    cushionWh: parseFloat(document.getElementById("s-cushion-wh").value) || 0,
     freight: parseFloat(document.getElementById("s-freight").value) || 0,
     fx: parseFloat(document.getElementById("s-fx").value) || 1,
     wh: parseFloat(document.getElementById("s-wh").value) || 0,
@@ -1515,6 +1610,50 @@ function sellCad(landed, s) {
 }
 function msrpCad(sell, s) {
   return Math.round(sell / (1 - s.msrpGM / 100)) - 0.01;
+}
+
+function computeCushionShell(priceUsd, s) {
+  const landed = (priceUsd * (1 + s.dutyShell / 100) + s.cushionFreight) * s.fx + s.cushionWh;
+  const sell = sellCad(landed, s);
+  const msrp = msrpCad(sell, s);
+  return { usd: priceUsd, landed: landed, sell: sell, msrp: msrp };
+}
+
+function cushionDecorativeCost(sizeKey, decorativeFeatures, s) {
+  let cost = 0;
+  const hasPipingOrFlange = decorativeFeatures.indexOf("Piping") !== -1 || decorativeFeatures.indexOf("Flange") !== -1;
+  if (hasPipingOrFlange) {
+    const smallSizes = ["18x18", "20x20"];
+    cost += smallSizes.indexOf(sizeKey) !== -1 ? 0.20 : 0.22;
+  }
+  if (decorativeFeatures.indexOf("Fringe") !== -1) {
+    cost += s.cushionFringeCost;
+  }
+  return cost;
+}
+
+function computeCushionFabricBasis(sizeKey, construction, frontPrice, frontWidth, backPrice, backWidth, decorativeFeatures, s) {
+  const frontPerPanel = cushionFabricCostPerPanel(sizeKey, frontWidth, frontPrice);
+  if (frontPerPanel === null) return null;
+
+  let fabricCost;
+  if (construction === "A/B Side") {
+    const backPerPanel = cushionFabricCostPerPanel(sizeKey, backWidth, backPrice);
+    if (backPerPanel === null) return null;
+    fabricCost = frontPerPanel + backPerPanel;
+  } else {
+    fabricCost = frontPerPanel * 2;
+  }
+
+  const decorativeCost = cushionDecorativeCost(sizeKey, decorativeFeatures || [], s);
+  const withWaste = fabricCost * (1 + s.cushionWaste / 100);
+  const withAddOns = withWaste + s.cushionLabor + decorativeCost;
+  const shellUsd = withAddOns * (1 + s.cushionFactoryProfit / 100);
+
+  const result = computeCushionShell(shellUsd, s);
+  result.fabricCost = fabricCost;
+  result.decorativeCost = decorativeCost;
+  return result;
 }
 
 function computeSize(width, length, isPair, price, quotedWidth, s) {
@@ -1542,8 +1681,49 @@ const CUSHION_SIZE_LABELS = {
   "22x22": "22\" x 22\" (55 x 55 cm)",
   "24x24": "24\" x 24\" (60 x 60 cm)",
   "16x24": "16\" x 24\" (41 x 61 cm)",
+  "14x22": "14\" x 22\" (36 x 56 cm)",
+  "14x20": "14\" x 20\" (36 x 51 cm)",
   "lumbar12x20": "12\" x 20\" Lumbar (30 x 50 cm)"
 };
+
+// Nominal finished size in cm (w, h) per size key. Cut size adds 2cm to each side.
+const CUSHION_SIZE_DIMS_CM = {
+  "18x18": { w: 45, h: 45 },
+  "20x20": { w: 50, h: 50 },
+  "22x22": { w: 55, h: 55 },
+  "24x24": { w: 60, h: 60 },
+  "16x24": { w: 41, h: 61 },
+  "14x22": { w: 36, h: 56 },
+  "14x20": { w: 36, h: 51 },
+  "lumbar12x20": { w: 30, h: 50 }
+};
+
+// Factory-quoted feather insert prices by size (logged as reference data only ---
+// not yet wired into any landed-cost calculation).
+const CUSHION_FEATHER_PRICES = {
+  "22x22": { fillWeightKg: 1.80, insertPriceUsd: 2.90 },
+  "20x20": { fillWeightKg: 1.30, insertPriceUsd: 2.39 },
+  "16x24": { fillWeightKg: 1.20, insertPriceUsd: 2.30 },
+  "14x22": { fillWeightKg: 1.15, insertPriceUsd: 2.10 },
+  "14x20": { fillWeightKg: 1.10, insertPriceUsd: 2.00 }
+};
+
+// Fabric cost for one cut panel: (cut length in m / panels that fit per pass) x price/m.
+// For non-square sizes, the shorter cut dimension runs across the roll width to
+// maximize panels-per-pass (an assumption pending confirmation for non-square cuts).
+function cushionFabricCostPerPanel(sizeKey, fabricWidthCm, fabricPriceM) {
+  const dims = CUSHION_SIZE_DIMS_CM[sizeKey];
+  if (!dims || !fabricWidthCm || !fabricPriceM) return null;
+  const cutW = dims.w + 2;
+  const cutH = dims.h + 2;
+  const acrossCm = Math.min(cutW, cutH);
+  const lengthCm = Math.max(cutW, cutH);
+  const panelsPerPass = Math.floor(fabricWidthCm / acrossCm);
+  if (panelsPerPass < 1) return null;
+  const metersPerPass = lengthCm / 100;
+  const metersPerPanel = metersPerPass / panelsPerPass;
+  return metersPerPanel * fabricPriceM;
+}
 
 function fmt(n) { return "$" + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
@@ -1557,7 +1737,7 @@ function toggleSettings() {
   chevron.innerHTML = open ? "&#9652;" : "&#9662;";
 }
 
-const SETTINGS_IDS = ["s-duty", "s-duty-shell", "s-duty-filled", "s-freight", "s-container-cost", "s-container-panels", "s-fx", "s-wh", "s-sell-gm", "s-msrp-gm", "s-bank-markup"];
+const SETTINGS_IDS = ["s-duty", "s-duty-shell", "s-duty-filled", "s-cushion-waste", "s-cushion-labor", "s-cushion-factory-profit", "s-cushion-fringe-cost", "s-cushion-freight", "s-cushion-container-cost", "s-cushion-container-shells", "s-cushion-wh", "s-freight", "s-container-cost", "s-container-panels", "s-fx", "s-wh", "s-sell-gm", "s-msrp-gm", "s-bank-markup"];
 
 async function saveSettings() {
   const values = {};
@@ -1592,6 +1772,22 @@ function applyFreightReference() {
   renderPriceCards();
   renderPriceTable();
   showToast("Freight field updated to " + fmt(perPanel) + "/panel.", "success");
+}
+
+function updateCushionFreightReference() {
+  const cost = parseFloat(document.getElementById("s-cushion-container-cost").value) || 0;
+  const shells = parseFloat(document.getElementById("s-cushion-container-shells").value) || 1;
+  document.getElementById("ref-cushion-freight").textContent = fmt(cost / shells);
+}
+
+function applyCushionFreightReference() {
+  const cost = parseFloat(document.getElementById("s-cushion-container-cost").value) || 0;
+  const shells = parseFloat(document.getElementById("s-cushion-container-shells").value) || 1;
+  const perShell = cost / shells;
+  document.getElementById("s-cushion-freight").value = perShell.toFixed(4);
+  saveSettings();
+  renderCushionPrice();
+  showToast("Freight field updated to " + fmt(perShell) + "/shell.", "success");
 }
 
 // ---------------------------------------------------------------
@@ -1682,17 +1878,106 @@ function renderPriceCards() {
   });
 }
 
+function renderCushionPrice() {
+  const container = document.getElementById("cushion-price-output");
+  if (!container) return;
+  const basis = document.getElementById("cushion-quote-basis").value;
+  const price = parseFloat(document.getElementById("price").value);
+  const s = getSettings();
+
+  if (basis === "Shell") {
+    const valid = price > 0;
+    const card = document.createElement("div");
+    card.className = "price-card";
+    let statsHtml, addBtnHtml = "";
+    if (valid) {
+      const r = computeCushionShell(price, s);
+      statsHtml =
+        '<div class="price-stat"><span class="l">Price (USD/pc)</span><span class="v">' + fmt(r.usd) + '</span></div>' +
+        '<div class="price-stat"><span class="l">Landed (CAD)</span><span class="v">' + fmt(r.landed) + '</span></div>' +
+        '<div class="price-stat"><span class="l">Sell (CAD)</span><span class="v">' + fmt(r.sell) + '</span></div>' +
+        '<div class="price-stat"><span class="l">MSRP (CAD)</span><span class="v">' + fmt(r.msrp) + '</span></div>';
+      const vendorVal = attrSafe(document.getElementById("vendor").value);
+      const itemVal = attrSafe(document.getElementById("item").value);
+      const sizeVal = document.getElementById("cushion-size").value;
+      const sizeLabel = attrSafe(CUSHION_SIZE_LABELS[sizeVal] || sizeVal || "(no size selected)");
+      addBtnHtml = '<button type="button" class="add-to-cart-btn" onclick="addCalculatorItemToCart(\'' + itemVal + '\', \'' + vendorVal + '\', \'cushions\', \'' + sizeLabel + '\', false, ' + r.sell + ')">+ Add to customer quote</button>';
+    } else {
+      statsHtml =
+        '<div class="price-stat"><span class="l">Price (USD/pc)</span><span class="v">\u2014</span></div>' +
+        '<div class="price-stat"><span class="l">Landed (CAD)</span><span class="v">\u2014</span></div>' +
+        '<div class="price-stat"><span class="l">Sell (CAD)</span><span class="v">\u2014</span></div>' +
+        '<div class="price-stat"><span class="l">MSRP (CAD)</span><span class="v">\u2014</span></div>';
+    }
+    card.innerHTML =
+      '<div class="price-card-head"><span class="price-label">Shell price</span></div>' +
+      '<div class="price-grid">' + statsHtml + '</div>' + addBtnHtml;
+    container.innerHTML = "";
+    container.appendChild(card);
+  } else if (basis === "Fabric") {
+    const sizeVal = document.getElementById("cushion-size").value;
+    const frontWidth = parseFloat(document.getElementById("cushion-fabric-width").value);
+    const construction = selectedCushionConstruction;
+    const backPrice = parseFloat(document.getElementById("cushion-back-fabric-price").value);
+    const backWidth = parseFloat(document.getElementById("cushion-back-fabric-width").value);
+
+    const ready = sizeVal && price > 0 && frontWidth > 0 && (construction !== "A/B Side" || (backPrice > 0 && backWidth > 0));
+    const card = document.createElement("div");
+    card.className = "price-card";
+    let statsHtml, addBtnHtml = "", warnHtml = "";
+
+    if (ready) {
+      const r = computeCushionFabricBasis(sizeVal, construction, price, frontWidth, backPrice, backWidth, selectedDecorativeFeatures, s);
+      if (r) {
+        statsHtml =
+          '<div class="price-stat"><span class="l">Fabric cost</span><span class="v">' + fmt(r.fabricCost) + '</span></div>' +
+          (r.decorativeCost > 0 ? '<div class="price-stat"><span class="l">Decorative</span><span class="v">' + fmt(r.decorativeCost) + '</span></div>' : '') +
+          '<div class="price-stat"><span class="l">Shell (USD/pc)</span><span class="v">' + fmt(r.usd) + '</span></div>' +
+          '<div class="price-stat"><span class="l">Landed (CAD)</span><span class="v">' + fmt(r.landed) + '</span></div>' +
+          '<div class="price-stat"><span class="l">Sell (CAD)</span><span class="v">' + fmt(r.sell) + '</span></div>' +
+          '<div class="price-stat"><span class="l">MSRP (CAD)</span><span class="v">' + fmt(r.msrp) + '</span></div>';
+        const vendorVal = attrSafe(document.getElementById("vendor").value);
+        const itemVal = attrSafe(document.getElementById("item").value);
+        const sizeLabel = attrSafe(CUSHION_SIZE_LABELS[sizeVal] || sizeVal);
+        addBtnHtml = '<button type="button" class="add-to-cart-btn" onclick="addCalculatorItemToCart(\'' + itemVal + '\', \'' + vendorVal + '\', \'cushions\', \'' + sizeLabel + '\', false, ' + r.sell + ')">+ Add to customer quote</button>';
+      } else {
+        warnHtml = '<div class="ref-box" style="color:var(--rust);">Cut size is wider than the fabric \u2014 no panels fit. Check width/size.</div>';
+      }
+    } else {
+      warnHtml = '<div class="ref-box">Enter fabric price, width, and select a cushion size' + (construction === "A/B Side" ? " (and back fabric price/width)" : "") + ' to see pricing.</div>';
+    }
+
+    card.innerHTML =
+      '<div class="price-card-head"><span class="price-label">Fabric-basis shell' + (construction === "A/B Side" ? '<span class="price-badge">A/B SIDE</span>' : '') + '</span></div>' +
+      (statsHtml ? '<div class="price-grid">' + statsHtml + '</div>' : '') + warnHtml + addBtnHtml;
+    container.innerHTML = "";
+    container.appendChild(card);
+  } else {
+    const note = (basis === "Finished Cushion") ? "Finished-cushion formula not built yet."
+               : "Select a \u201cQuoted as\u201d option above to see pricing.";
+    container.innerHTML =
+      '<div class="ref-box" style="text-align:center; padding:24px 16px;">' +
+      '<div style="font-size:24px; margin-bottom:8px;">&#128717;</div>' +
+      '<div style="font-weight:700; color:var(--navy); margin-bottom:4px;">' + note + '</div>' +
+      '<div>Shell and Fabric-basis pricing are live \u2014 switch to one of those options above to see it.</div>' +
+      '</div>';
+  }
+}
+
 ["price", "width"].forEach(function(id) {
   document.getElementById(id).addEventListener("input", function() {
     renderPriceCards();
     renderPriceTable();
+    renderCushionPrice();
   });
 });
 SETTINGS_IDS.forEach(function(id) {
   document.getElementById(id).addEventListener("input", function() {
     if (id === "s-container-cost" || id === "s-container-panels") updateFreightReference();
+    if (id === "s-cushion-container-cost" || id === "s-cushion-container-shells") updateCushionFreightReference();
     renderPriceCards();
     renderPriceTable();
+    renderCushionPrice();
     saveSettings();
   });
 });
@@ -1760,7 +2045,10 @@ function setCategory(cat) {
   document.getElementById("width-field").style.display = (cat === "curtains") ? "block" : "none";
   document.getElementById("curtain-price-section").style.display = (cat === "curtains") ? "block" : "none";
   document.getElementById("cushion-price-section").style.display = (cat === "cushions") ? "block" : "none";
+  document.getElementById("settings-curtain-group").style.display = (cat === "curtains") ? "block" : "none";
+  document.getElementById("settings-cushion-group").style.display = (cat === "cushions") ? "block" : "none";
   updatePriceLabel();
+  if (cat === "cushions") renderCushionPrice();
 }
 
 function updatePriceLabel() {
@@ -1779,10 +2067,20 @@ function updatePriceLabel() {
   }
 }
 
+function setCushionConstruction(value) {
+  selectedCushionConstruction = value;
+  document.querySelectorAll("#cushion-construction-group .chip").forEach(function(btn) {
+    btn.classList.toggle("selected", btn.textContent === value);
+  });
+  document.getElementById("cushion-back-fabric-fields").style.display = (value === "A/B Side") ? "block" : "none";
+  renderCushionPrice();
+}
+
 // ---------------------------------------------------------------
 // Cushion: Decorative feature (multi-select, unlike Curtain type)
 // ---------------------------------------------------------------
 let selectedDecorativeFeatures = [];
+let selectedCushionConstruction = "Back to Back";
 
 function toggleDecorativeFeature(name) {
   const idx = selectedDecorativeFeatures.indexOf(name);
@@ -1791,6 +2089,7 @@ function toggleDecorativeFeature(name) {
   document.querySelectorAll("#decorative-feature-group .chip").forEach(function(btn) {
     btn.classList.toggle("selected", selectedDecorativeFeatures.indexOf(btn.textContent) !== -1);
   });
+  renderCushionPrice();
 }
 
 // ---------------------------------------------------------------
@@ -1952,21 +2251,32 @@ async function handleItemQRScanned(event) {
       image.src = dataUrl;
     });
 
-    const maxDim = 1200;
-    let w = img.width, h = img.height;
-    if (w > maxDim || h > maxDim) {
-      const scale = maxDim / Math.max(w, h);
-      w = Math.round(w * scale);
-      h = Math.round(h * scale);
-    }
-    const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(img, 0, 0, w, h);
-    const imageData = ctx.getImageData(0, 0, w, h);
+    // Try at increasing resolutions: fast first pass, then progressively
+    // larger re-attempts if the QR code turns out to be small/blurry/
+    // compressed in the frame. A capped-too-low first pass was the actual
+    // cause of real-world scan failures on otherwise-valid photos.
+    const attempts = [1800, 3000, Math.max(img.width, img.height)];
+    let result = null;
 
-    const result = window.jsQR(imageData.data, imageData.width, imageData.height);
+    for (let i = 0; i < attempts.length && !result; i++) {
+      const maxDim = attempts[i];
+      let w = img.width, h = img.height;
+      if (w > maxDim || h > maxDim) {
+        const scale = maxDim / Math.max(w, h);
+        w = Math.round(w * scale);
+        h = Math.round(h * scale);
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, w, h);
+      const imageData = ctx.getImageData(0, 0, w, h);
+      result = window.jsQR(imageData.data, imageData.width, imageData.height);
+      if (i > 0 && result) {
+        statusEl.textContent = "Found it on a closer look\u2026";
+      }
+    }
 
     if (result && result.data) {
       document.getElementById("item").value = result.data;
@@ -2120,6 +2430,10 @@ async function saveQuote() {
       photo: productPhotoDataUrl || "",
       fabricPrice: parseFloat(document.getElementById("price").value) || null,
       cushionQuoteBasis: document.getElementById("cushion-quote-basis").value || "",
+      cushionFabricWidth: parseFloat(document.getElementById("cushion-fabric-width").value) || null,
+      cushionConstruction: selectedCushionConstruction,
+      cushionBackFabricPrice: parseFloat(document.getElementById("cushion-back-fabric-price").value) || null,
+      cushionBackFabricWidth: parseFloat(document.getElementById("cushion-back-fabric-width").value) || null,
       cushionFabricType: document.getElementById("cushion-fabric-type").value || "",
       cushionSize: document.getElementById("cushion-size").value || "",
       cushionFillType: document.getElementById("cushion-fill-type").value || "",
@@ -2207,6 +2521,10 @@ function clearAll() {
     });
     document.getElementById("cushion-quote-basis").value = "";
     updatePriceLabel();
+    document.getElementById("cushion-fabric-width").value = "";
+    document.getElementById("cushion-back-fabric-price").value = "";
+    document.getElementById("cushion-back-fabric-width").value = "";
+    setCushionConstruction("Back to Back");
     document.getElementById("cushion-fabric-type").value = "";
     document.getElementById("cushion-size").value = "";
     document.getElementById("cushion-fill-type").value = "";
@@ -2255,6 +2573,10 @@ async function loadQuoteForEdit(id) {
   if (entry.category === "cushions") {
     document.getElementById("cushion-quote-basis").value = entry.cushionQuoteBasis || "";
     updatePriceLabel();
+    document.getElementById("cushion-fabric-width").value = (typeof entry.cushionFabricWidth === "number") ? entry.cushionFabricWidth : "";
+    document.getElementById("cushion-back-fabric-price").value = (typeof entry.cushionBackFabricPrice === "number") ? entry.cushionBackFabricPrice : "";
+    document.getElementById("cushion-back-fabric-width").value = (typeof entry.cushionBackFabricWidth === "number") ? entry.cushionBackFabricWidth : "";
+    setCushionConstruction(entry.cushionConstruction || "Back to Back");
     document.getElementById("cushion-fabric-type").value = entry.cushionFabricType || "";
     document.getElementById("cushion-size").value = entry.cushionSize || "";
     document.getElementById("cushion-fill-type").value = entry.cushionFillType || "";
@@ -2264,6 +2586,7 @@ async function loadQuoteForEdit(id) {
     document.querySelectorAll("#decorative-feature-group .chip").forEach(function(btn) {
       btn.classList.toggle("selected", selectedDecorativeFeatures.indexOf(btn.textContent) !== -1);
     });
+    renderCushionPrice();
   } else {
     if (typeof entry.fabricWidth === "number") {
       document.getElementById("width").value = entry.fabricWidth;
@@ -2975,6 +3298,10 @@ function buildQuoteDetailHtml(entry) {
     const rows = [
       ["Quoted as", entry.cushionQuoteBasis],
       ["Fabric type", entry.cushionFabricType],
+      ["Fabric width", (typeof entry.cushionFabricWidth === "number") ? entry.cushionFabricWidth + " cm" : ""],
+      ["Construction", entry.cushionConstruction],
+      ["Back fabric price", (typeof entry.cushionBackFabricPrice === "number") ? fmt(entry.cushionBackFabricPrice) + "/m" : ""],
+      ["Back fabric width", (typeof entry.cushionBackFabricWidth === "number") ? entry.cushionBackFabricWidth + " cm" : ""],
       ["Cushion size", CUSHION_SIZE_LABELS[entry.cushionSize] || entry.cushionSize],
       [priceLabel, (typeof entry.fabricPrice === "number") ? fmt(entry.fabricPrice) + priceUnit : ""],
       ["Fill type", entry.cushionFillType],
@@ -3520,11 +3847,13 @@ function showScreen(name) {
 (async function init() {
   await loadSettings();
   updateFreightReference();
+  updateCushionFreightReference();
   await refreshSupplierCache();
   await loadCart();
   await loadCqMeta();
   updateCartBadge();
   renderPriceCards();
+  renderCushionPrice();
   renderLog();
 })();
 </script>
