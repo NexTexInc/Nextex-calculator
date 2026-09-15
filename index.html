@@ -361,6 +361,24 @@
 
   .albums-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .album-card { cursor: pointer; }
+  .album-card.selected .album-card-cover { outline: 3px solid var(--rust); outline-offset: -3px; }
+  .album-select-check {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.9);
+    border: 1.5px solid var(--rust);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--rust);
+  }
+  .album-select-check.checked { background: var(--rust); color: white; }
   .album-card-cover {
     position: relative;
     aspect-ratio: 1 / 1;
@@ -2006,6 +2024,15 @@
         </div>
         <input type="file" id="create-album-upload-input" accept="image/*" multiple style="display:none;" onchange="handleCreateAlbumUpload(event)">
         <button type="button" class="cq-back-btn" style="margin-top:8px; width:100%;" onclick="cancelCreateAlbumFlow()">Cancel</button>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; margin-bottom:8px;">
+        <button type="button" class="cq-back-btn" id="albums-select-toggle" onclick="toggleAlbumSelectMode()">Select albums</button>
+      </div>
+      <div id="albums-select-bar" class="gallery-select-bar" style="display:none;">
+        <span id="albums-select-count">0 selected</span>
+        <button type="button" class="btn btn-clear-all" style="flex:none; padding:10px 16px;" onclick="confirmDeleteSelectedAlbums()">Delete</button>
+        <button type="button" class="btn btn-clear-partial" style="flex:none; padding:10px 16px;" onclick="cancelAlbumSelectMode()">Cancel</button>
       </div>
 
       <div id="albums-grid"></div>
@@ -4208,6 +4235,29 @@ async function saveAlbums(albums) {
   await storageSet("nextex_albums", JSON.stringify(albums));
 }
 
+async function stripAlbumIdFromStore(storageKey, albumId) {
+  const raw = await storageGet(storageKey);
+  let list = [];
+  try { list = raw ? JSON.parse(raw) : []; } catch (e) { list = []; }
+  let changed = false;
+  list.forEach(function(entry) {
+    if (entry.albumIds && entry.albumIds.indexOf(albumId) !== -1) {
+      entry.albumIds = entry.albumIds.filter(function(id) { return id !== albumId; });
+      changed = true;
+    }
+  });
+  if (changed) await storageSet(storageKey, JSON.stringify(list));
+}
+
+async function deleteAlbum(albumId) {
+  const albums = await getAlbums();
+  await saveAlbums(albums.filter(function(a) { return a.id !== albumId; }));
+  // Untag every photo from this album -- the photos themselves are never touched.
+  await stripAlbumIdFromStore("nextex_quotes", albumId);
+  await stripAlbumIdFromStore("nextex_suppliers", albumId);
+  await stripAlbumIdFromStore("nextex_session_photos", albumId);
+}
+
 async function createAlbum(name) {
   const albums = await getAlbums();
   const album = { id: "alb_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7), name: name, createdDate: new Date().toLocaleDateString() };
@@ -4376,15 +4426,83 @@ async function renderAlbumsHome() {
   grid.innerHTML = '<div class="albums-grid">' + albums.map(function(a) {
     const members = allPhotoEntries.filter(function(e) { return (e.albumIds || []).indexOf(a.id) !== -1; });
     const cover = members[0];
-    return '<div class="album-card" onclick="openAlbum(\'' + a.id + '\')">' +
+    const isSelected = selectedAlbumIds.has(a.id);
+    const clickHandler = albumSelectMode ? ("toggleAlbumSelection('" + a.id + "')") : ("openAlbum('" + a.id + "')");
+    const deleteBadge = albumSelectMode ? "" :
+      '<span class="photo-gallery-badge" style="background:rgba(166,92,70,0.85); cursor:pointer;" onclick="event.stopPropagation(); confirmDeleteSingleAlbum(\'' + a.id + '\', \'' + attrSafe(a.name) + '\')">&#10005; Delete</span>';
+    const selectOverlay = albumSelectMode
+      ? '<span class="album-select-check' + (isSelected ? " checked" : "") + '">' + (isSelected ? "&#10003;" : "") + '</span>'
+      : "";
+    return '<div class="album-card' + (isSelected ? " selected" : "") + '" onclick="' + clickHandler + '">' +
       '<div class="album-card-cover">' +
         (cover ? '<img src="' + cover.photo + '" alt="">' : '<div class="empty-cover">&#128247;</div>') +
         '<span class="album-card-count">' + members.length + '</span>' +
+        deleteBadge +
+        selectOverlay +
       '</div>' +
       '<div class="album-card-name">' + escapeHtml(a.name) + '</div>' +
     '</div>';
   }).join("") + '</div>';
 }
+
+let albumSelectMode = false;
+let selectedAlbumIds = new Set();
+
+function toggleAlbumSelectMode() {
+  albumSelectMode = true;
+  selectedAlbumIds = new Set();
+  document.getElementById("albums-select-toggle").style.display = "none";
+  document.getElementById("albums-select-bar").style.display = "flex";
+  document.getElementById("albums-select-count").textContent = "0 selected";
+  renderAlbumsHome();
+}
+
+function cancelAlbumSelectMode() {
+  albumSelectMode = false;
+  selectedAlbumIds = new Set();
+  document.getElementById("albums-select-toggle").style.display = "inline-block";
+  document.getElementById("albums-select-bar").style.display = "none";
+  renderAlbumsHome();
+}
+
+function toggleAlbumSelection(albumId) {
+  if (selectedAlbumIds.has(albumId)) selectedAlbumIds.delete(albumId);
+  else selectedAlbumIds.add(albumId);
+  document.getElementById("albums-select-count").textContent = selectedAlbumIds.size + " selected";
+  renderAlbumsHome();
+}
+
+function confirmDeleteSelectedAlbums() {
+  if (selectedAlbumIds.size === 0) {
+    showToast("Select at least one album first.", "error");
+    return;
+  }
+  const ids = Array.from(selectedAlbumIds);
+  const count = ids.length;
+  const label = count + (count === 1 ? " album" : " albums");
+  showConfirm(
+    "Delete " + label + "? Photos will stay in the Gallery \u2014 they just won\u2019t be grouped under " + (count === 1 ? "this album" : "these albums") + " anymore.",
+    async function() {
+      for (let i = 0; i < ids.length; i++) {
+        await deleteAlbum(ids[i]);
+      }
+      showToast(label + " deleted.", "success");
+      cancelAlbumSelectMode();
+    }
+  );
+}
+
+function confirmDeleteSingleAlbum(albumId, albumName) {
+  showConfirm(
+    'Delete "' + albumName + '"? Photos will stay in the Gallery \u2014 they just won\u2019t be grouped under this album anymore.',
+    async function() {
+      await deleteAlbum(albumId);
+      showToast("Album deleted.", "success");
+      renderAlbumsHome();
+    }
+  );
+}
+
 
 function openAlbum(albumId) {
   gallerySelectMode = false;
