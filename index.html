@@ -1372,6 +1372,16 @@
     </div>
   </div>
 
+  <div id="add-album-banner" class="confirm-banner">
+    <div id="add-album-message" class="confirm-message">Add to which album?</div>
+    <select id="add-album-target" onchange="handleAddAlbumTargetChange()" style="width:100%; margin-bottom:8px;"></select>
+    <input type="text" id="add-album-new-name" placeholder="New album name" style="display:none; margin-bottom:10px;">
+    <div class="confirm-actions">
+      <button class="btn btn-clear-all" id="add-album-confirm-btn" style="flex:none; padding:8px 18px;" onclick="confirmAddToAlbum()">Add</button>
+      <button class="btn" id="add-album-cancel-btn" style="flex:none; padding:8px 18px; background:var(--border); color:var(--text-primary);" onclick="cancelAddToAlbum()">Cancel</button>
+    </div>
+  </div>
+
   <div id="photo-lightbox" class="lightbox" onclick="closeLightbox()">
     <button class="lightbox-close" onclick="closeLightbox()" aria-label="Close">&#10005;</button>
     <img id="lightbox-img" src="" alt="Product photo" onclick="event.stopPropagation();">
@@ -1398,6 +1408,7 @@
         <button type="button" class="swipe-lightbox-goto-btn" id="swipe-lightbox-goto-cart-btn" onclick="goToCustomerQuoteFromGallery()" style="display:none;">Go to Customer Quote</button>
         <button type="button" class="swipe-lightbox-goto-btn" id="swipe-lightbox-goto-meeting-btn" onclick="goToMeetingFromGallery()" style="display:none;">Go to Meeting</button>
         <button type="button" class="swipe-lightbox-goto-btn" id="swipe-lightbox-goto-sourcing-btn" onclick="goToSourcingFromGallery()" style="display:none;">Go to Sourcing</button>
+        <button type="button" class="swipe-lightbox-goto-btn" onclick="startAddGalleryPhotoToAlbum()">Add to Album</button>
         <button type="button" class="swipe-lightbox-goto-btn" id="swipe-lightbox-move-album-btn" onclick="startMoveGalleryPhoto()" style="display:none;">Move to Album</button>
         <button type="button" class="swipe-lightbox-goto-btn" onclick="initiateQuoteFromGalleryPhoto()">Initiate Supplier Quote</button>
         <button type="button" class="swipe-lightbox-goto-btn delete" onclick="confirmDeleteGalleryPhoto()">&#128465; Delete photo</button>
@@ -5088,6 +5099,54 @@ function downloadGalleryPhoto() {
 }
 
 let moveAlbumContext = null;
+
+let addAlbumPhotoContext = null;
+
+async function startAddGalleryPhotoToAlbum() {
+  const p = galleryPhotos[galleryLightboxIndex];
+  if (!p) return;
+  addAlbumPhotoContext = p;
+
+  const albums = await getAlbums();
+  const select = document.getElementById("add-album-target");
+  select.innerHTML = albums.map(function(a) {
+    return '<option value="' + a.id + '">' + escapeHtml(a.name) + '</option>';
+  }).join("") + '<option value="__new__">+ New album&#8230;</option>';
+  document.getElementById("add-album-new-name").style.display = (albums.length === 0) ? "block" : "none";
+  document.getElementById("add-album-banner").classList.add("show");
+}
+
+function handleAddAlbumTargetChange() {
+  const select = document.getElementById("add-album-target");
+  document.getElementById("add-album-new-name").style.display = (select.value === "__new__") ? "block" : "none";
+}
+
+function cancelAddToAlbum() {
+  document.getElementById("add-album-banner").classList.remove("show");
+  addAlbumPhotoContext = null;
+}
+
+async function confirmAddToAlbum() {
+  if (!addAlbumPhotoContext) return;
+  const select = document.getElementById("add-album-target");
+  let targetAlbumId = select.value;
+
+  if (targetAlbumId === "__new__" || !targetAlbumId) {
+    const name = document.getElementById("add-album-new-name").value.trim();
+    if (!name) {
+      showToast("Enter a name for the new album.", "error");
+      return;
+    }
+    const album = await createAlbum(name);
+    targetAlbumId = album.id;
+  }
+
+  await addPhotoRefToAlbum(addAlbumPhotoContext.sourceType, addAlbumPhotoContext.sourceId, targetAlbumId);
+  document.getElementById("add-album-banner").classList.remove("show");
+  showToast("Added to album.", "success");
+  addAlbumPhotoContext = null;
+  renderPhotoGallery();
+}
 
 function startMoveGalleryPhoto() {
   const p = galleryPhotos[galleryLightboxIndex];
