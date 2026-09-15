@@ -463,6 +463,7 @@
     min-width: 200px;
   }
   .swipe-lightbox-goto-btn.download { background: white; color: var(--navy); border: 1.5px solid rgba(255,255,255,0.6); }
+  .swipe-lightbox-goto-btn.delete { background: none; color: var(--rust); border: 1.5px solid var(--rust); }
   .hamburger-menu-item svg { flex-shrink: 0; color: var(--terracotta-dark); }
   .header-divider { width: 1px; height: 22px; background: rgba(255,255,255,0.25); flex-shrink: 0; }
   .brand-logo-text { height: 24px; display: block; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.25)); flex-shrink: 0; }
@@ -1333,6 +1334,15 @@
     </div>
   </div>
 
+  <div id="delete-choice-banner" class="confirm-banner">
+    <div id="delete-choice-message" class="confirm-message"></div>
+    <div class="confirm-actions" style="flex-direction:column; gap:8px;">
+      <button class="btn btn-clear-partial" id="delete-choice-album-btn" style="width:100%;">Delete From Album Only</button>
+      <button class="btn btn-clear-all" id="delete-choice-gallery-btn" style="width:100%;">Delete From Gallery</button>
+      <button class="btn" id="delete-choice-cancel-btn" style="width:100%; background:var(--border); color:var(--text-primary);">Cancel</button>
+    </div>
+  </div>
+
   <div id="photo-lightbox" class="lightbox" onclick="closeLightbox()">
     <button class="lightbox-close" onclick="closeLightbox()" aria-label="Close">&#10005;</button>
     <img id="lightbox-img" src="" alt="Product photo" onclick="event.stopPropagation();">
@@ -1357,6 +1367,9 @@
         <button type="button" class="swipe-lightbox-goto-btn" id="swipe-lightbox-goto-quote-btn" onclick="goToQuoteFromGallery()" style="display:none;">Take me to Quote</button>
         <button type="button" class="swipe-lightbox-goto-btn" id="swipe-lightbox-goto-supplier-btn" onclick="goToSupplierFromGallery()" style="display:none;">Go to Supplier</button>
         <button type="button" class="swipe-lightbox-goto-btn" id="swipe-lightbox-goto-cart-btn" onclick="goToCustomerQuoteFromGallery()" style="display:none;">Go to Customer Quote</button>
+        <button type="button" class="swipe-lightbox-goto-btn" id="swipe-lightbox-goto-meeting-btn" onclick="goToMeetingFromGallery()" style="display:none;">Go to Meeting</button>
+        <button type="button" class="swipe-lightbox-goto-btn" id="swipe-lightbox-goto-sourcing-btn" onclick="goToSourcingFromGallery()" style="display:none;">Go to Sourcing</button>
+        <button type="button" class="swipe-lightbox-goto-btn delete" onclick="confirmDeleteGalleryPhoto()">&#128465; Delete photo</button>
       </div>
     </div>
   </div>
@@ -1771,8 +1784,11 @@
         <div class="chip-group" id="sort-chip-group">
           <button type="button" class="chip selected" onclick="setSavedSort('item')" data-sort="item">Item #</button>
           <button type="button" class="chip" onclick="setSavedSort('vendor')" data-sort="vendor">Supplier</button>
+          <button type="button" class="chip" onclick="setSavedSort('customer')" data-sort="customer">Customer</button>
           <button type="button" class="chip" onclick="setSavedSort('date')" data-sort="date">Date</button>
           <button type="button" class="chip" onclick="setSavedSort('type')" data-sort="type">Backing</button>
+          <button type="button" class="chip" onclick="setSavedSort('price_asc')" data-sort="price_asc">Price: Low to High</button>
+          <button type="button" class="chip" onclick="setSavedSort('price_desc')" data-sort="price_desc">Price: High to Low</button>
         </div>
 
         <div class="settings-sub">Filter by range</div>
@@ -1949,9 +1965,11 @@
       </div>
       <button type="button" class="gallery-clear-filters-btn" id="gallery-clear-filters-btn" onclick="clearGalleryFilters()" style="display:none;">&#10005; Clear filters</button>
 
-      <div style="display:flex; justify-content:flex-end; margin-bottom:8px;">
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-bottom:8px;">
+        <button type="button" class="cq-back-btn" onclick="triggerGalleryUpload()">Upload photos</button>
         <button type="button" class="cq-back-btn" id="gallery-select-toggle" onclick="toggleGallerySelectMode()">Select photos</button>
       </div>
+      <input type="file" id="gallery-upload-input" accept="image/*" multiple style="display:none;" onchange="handleGalleryUpload(event)">
 
       <div id="photo-gallery-grid"></div>
     </div>
@@ -1960,6 +1978,7 @@
       <span id="gallery-select-count">0 selected</span>
       <select id="gallery-album-picker" onchange="handleAlbumPickerChange()"></select>
       <button type="button" class="btn btn-save" style="flex:none; padding:10px 16px;" onclick="addSelectedToAlbum()">Add</button>
+      <button type="button" class="btn btn-clear-all" style="flex:none; padding:10px 16px;" onclick="confirmDeleteSelectedPhotos()">Delete</button>
       <button type="button" class="btn btn-clear-partial" style="flex:none; padding:10px 16px;" onclick="cancelGallerySelectMode()">Cancel</button>
       <input type="text" id="gallery-new-album-name" placeholder="New album name" style="width:100%;">
     </div>
@@ -2047,7 +2066,16 @@
       </div>
       <div id="meeting-detail-meta"></div>
 
-      <p class="section-label" style="margin-top:4px;">Audio recording</p>
+      <p class="section-label" style="margin-top:4px;">Photos</p>
+      <div class="field-row" style="gap:8px; margin-bottom:10px;">
+        <button type="button" class="scan-btn" style="flex:1;" onclick="triggerSessionPhotoCamera('meeting')">Take photo</button>
+        <button type="button" class="scan-btn" style="flex:1;" onclick="triggerSessionPhotoGallery('meeting')">Upload photo</button>
+      </div>
+      <input type="file" id="meeting-photo-input-camera" accept="image/*" capture="environment" style="display:none;" onchange="handleSessionPhotoSelected(event, 'meeting')">
+      <input type="file" id="meeting-photo-input-gallery" accept="image/*" style="display:none;" onchange="handleSessionPhotoSelected(event, 'meeting')">
+      <div id="meeting-detail-photos"></div>
+
+      <p class="section-label" style="margin-top:20px;">Audio recording</p>
       <button type="button" class="audio-record-btn" id="meeting-record-btn" onclick="toggleAudioRecording('meeting')">&#9679; Start Recording</button>
       <div class="audio-timer" id="meeting-audio-timer" style="display:none;">00:00</div>
       <div id="meeting-audio-list"></div>
@@ -2067,9 +2095,6 @@
 
       <p class="section-label" style="margin-top:20px;">Customer quote items from this meeting</p>
       <div id="meeting-detail-cart"></div>
-
-      <p class="section-label" style="margin-top:20px;">Photos from this meeting</p>
-      <div id="meeting-detail-photos"></div>
     </div>
   </div>
 
@@ -2155,7 +2180,16 @@
       </div>
       <div id="sourcing-detail-meta"></div>
 
-      <p class="section-label" style="margin-top:4px;">Audio recording</p>
+      <p class="section-label" style="margin-top:4px;">Photos</p>
+      <div class="field-row" style="gap:8px; margin-bottom:10px;">
+        <button type="button" class="scan-btn" style="flex:1;" onclick="triggerSessionPhotoCamera('sourcing')">Take photo</button>
+        <button type="button" class="scan-btn" style="flex:1;" onclick="triggerSessionPhotoGallery('sourcing')">Upload photo</button>
+      </div>
+      <input type="file" id="sourcing-photo-input-camera" accept="image/*" capture="environment" style="display:none;" onchange="handleSessionPhotoSelected(event, 'sourcing')">
+      <input type="file" id="sourcing-photo-input-gallery" accept="image/*" style="display:none;" onchange="handleSessionPhotoSelected(event, 'sourcing')">
+      <div id="sourcing-detail-photos"></div>
+
+      <p class="section-label" style="margin-top:20px;">Audio recording</p>
       <button type="button" class="audio-record-btn" id="sourcing-record-btn" onclick="toggleAudioRecording('sourcing')">&#9679; Start Recording</button>
       <div class="audio-timer" id="sourcing-audio-timer" style="display:none;">00:00</div>
       <div id="sourcing-audio-list"></div>
@@ -2175,9 +2209,6 @@
 
       <p class="section-label" style="margin-top:20px;">New suppliers added during this sourcing</p>
       <div id="sourcing-detail-suppliers"></div>
-
-      <p class="section-label" style="margin-top:20px;">Photos from this sourcing</p>
-      <div id="sourcing-detail-photos"></div>
     </div>
   </div>
 
@@ -2270,6 +2301,29 @@ function showConfirm(message, onYes, onNo) {
   function onNoClick() { cleanup(); if (onNo) onNo(); }
   yesBtn.addEventListener("click", onYesClick);
   noBtn.addEventListener("click", onNoClick);
+}
+
+function showDeleteChoicePrompt(message, onAlbumOnly, onPermanent) {
+  const banner = document.getElementById("delete-choice-banner");
+  const msgEl = document.getElementById("delete-choice-message");
+  const albumBtn = document.getElementById("delete-choice-album-btn");
+  const galleryBtn = document.getElementById("delete-choice-gallery-btn");
+  const cancelBtn = document.getElementById("delete-choice-cancel-btn");
+  msgEl.textContent = message;
+  banner.classList.add("show");
+
+  function cleanup() {
+    banner.classList.remove("show");
+    albumBtn.removeEventListener("click", onAlbumClick);
+    galleryBtn.removeEventListener("click", onGalleryClick);
+    cancelBtn.removeEventListener("click", onCancelClick);
+  }
+  function onAlbumClick() { cleanup(); onAlbumOnly(); }
+  function onGalleryClick() { cleanup(); onPermanent(); }
+  function onCancelClick() { cleanup(); }
+  albumBtn.addEventListener("click", onAlbumClick);
+  galleryBtn.addEventListener("click", onGalleryClick);
+  cancelBtn.addEventListener("click", onCancelClick);
 }
 
 // ---------------------------------------------------------------
@@ -3316,14 +3370,8 @@ async function renderMeetingDetail(meetingId) {
   if (meetingQuotes.length === 0) {
     quotesContainer.innerHTML = '<div class="log-empty"><div class="icon">&#128203;</div>No quotes saved to this meeting yet.</div>';
   } else {
-    quotesContainer.innerHTML = meetingQuotes.map(function(q) {
-      const headline = (q.prices && q.prices[0]) ? fmt(q.prices[0].msrp) + " MSRP" : "No pricing yet";
-      return '<div class="meeting-row">' +
-        '<div class="meeting-row-info">' +
-          '<div class="meeting-row-name">' + escapeHtml(q.item || "(no item #)") + '</div>' +
-          '<div class="meeting-row-sub">' + escapeHtml(q.vendor || "") + ' &middot; ' + escapeHtml(headline) + '</div>' +
-        '</div>' +
-      '</div>';
+    quotesContainer.innerHTML = meetingQuotes.map(function(q, idx) {
+      return buildExpandableQuoteRow(q, idx, "qrow_meeting_" + q.id);
     }).join("");
   }
 
@@ -3342,14 +3390,24 @@ async function renderMeetingDetail(meetingId) {
     }).join("");
   }
 
+  const sessionPhotosAll = await getSessionPhotos();
+  const meetingSessionPhotos = sessionPhotosAll.filter(function(p) { return p.meetingId === meetingId; });
+
   const photosContainer = document.getElementById("meeting-detail-photos");
-  const meetingPhotos = meetingQuotes.filter(function(q) { return q.photo; });
-  if (meetingPhotos.length === 0) {
+  const meetingQuotePhotos = meetingQuotes.filter(function(q) { return q.photo; });
+  const totalPhotoCount = meetingQuotePhotos.length + meetingSessionPhotos.length;
+  if (totalPhotoCount === 0) {
     photosContainer.innerHTML = '<div class="log-empty"><div class="icon">&#128247;</div>No photos yet.</div>';
   } else {
-    photosContainer.innerHTML = '<div class="photo-gallery-grid">' + meetingPhotos.map(function(q) {
-      return '<div class="photo-gallery-tile"><img src="' + q.photo + '" alt=""></div>';
-    }).join("") + '</div>';
+    const quoteTiles = meetingQuotePhotos.map(function(q) {
+      return '<div class="photo-gallery-tile"><img src="' + q.photo + '" alt="" style="cursor:pointer;" onclick="openLightbox(\'' + q.photo + '\', event)"></div>';
+    }).join("");
+    const sessionTiles = meetingSessionPhotos.map(function(p) {
+      return '<div class="photo-gallery-tile"><img src="' + p.photo + '" alt="" style="cursor:pointer;" onclick="openLightbox(\'' + p.photo + '\', event)">' +
+        '<span class="photo-gallery-badge" style="background:rgba(166,92,70,0.85); cursor:pointer;" onclick="event.stopPropagation(); deleteSessionPhoto(\'' + p.id + '\', \'meeting\', \'' + meetingId + '\')">&#10005; Remove</span>' +
+      '</div>';
+    }).join("");
+    photosContainer.innerHTML = '<div class="photo-gallery-grid">' + sessionTiles + quoteTiles + '</div>';
   }
 }
 
@@ -3394,7 +3452,8 @@ async function downloadMeetingSummary() {
   try { quotes = rawQuotes ? JSON.parse(rawQuotes) : []; } catch (e) { quotes = []; }
   const meetingQuotes = quotes.filter(function(q) { return q.meetingId === meeting.id; });
   const meetingCartItems = customerCart.filter(function(c) { return c.meetingId === meeting.id; });
-  const photoCount = meetingQuotes.filter(function(q) { return q.photo; }).length;
+  const meetingSessionPhotosForDownload = (await getSessionPhotos()).filter(function(p) { return p.meetingId === meeting.id; });
+  const photoCount = meetingQuotes.filter(function(q) { return q.photo; }).length + meetingSessionPhotosForDownload.length;
 
   const catLabel = (meeting.categories || []).join(" + ") || "Not set";
 
@@ -3446,6 +3505,94 @@ async function downloadMeetingSummary() {
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
   showToast("Downloading meeting summary\u2026", "success");
+}
+
+// ---------------------------------------------------------------
+// Session photos -- lightweight photo capture directly inside a
+// Meeting or Sourcing session, with no quote required. Tagged to
+// exactly one of meetingId / sourcingId.
+// ---------------------------------------------------------------
+async function getSessionPhotos() {
+  const raw = await storageGet("nextex_session_photos");
+  try { return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
+}
+
+async function saveSessionPhotos(list) {
+  await storageSet("nextex_session_photos", JSON.stringify(list));
+}
+
+function triggerSessionPhotoCamera(context) {
+  document.getElementById(context + "-photo-input-camera").click();
+}
+
+function triggerSessionPhotoGallery(context) {
+  document.getElementById(context + "-photo-input-gallery").click();
+}
+
+async function handleSessionPhotoSelected(event, context) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+  event.target.value = "";
+  const id = context === "meeting" ? currentMeetingDetailId : currentSourcingDetailId;
+  if (!id) return;
+  try {
+    const photoDataUrl = await compressImageFile(file, 480, 0.72);
+    const list = await getSessionPhotos();
+    const entry = {
+      id: "sphoto_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+      photo: photoDataUrl,
+      meetingId: context === "meeting" ? id : null,
+      sourcingId: context === "sourcing" ? id : null,
+      timestamp: new Date().toISOString()
+    };
+    list.push(entry);
+    await saveSessionPhotos(list);
+    showToast("Photo added.", "success");
+    if (context === "meeting") renderMeetingDetail(id);
+    else renderSourcingDetail(id);
+  } catch (e) {
+    showToast("Could not process that photo.", "error");
+  }
+}
+
+async function deleteSessionPhoto(photoId, context, entityId) {
+  const list = await getSessionPhotos();
+  const filtered = list.filter(function(p) { return p.id !== photoId; });
+  await saveSessionPhotos(filtered);
+  showToast("Photo removed.", "success");
+  if (context === "meeting") renderMeetingDetail(entityId);
+  else renderSourcingDetail(entityId);
+}
+
+function triggerGalleryUpload() {
+  document.getElementById("gallery-upload-input").click();
+}
+
+async function handleGalleryUpload(event) {
+  const files = event.target.files ? Array.from(event.target.files) : [];
+  event.target.value = "";
+  if (files.length === 0) return;
+
+  const list = await getSessionPhotos();
+  let addedCount = 0;
+  for (let i = 0; i < files.length; i++) {
+    try {
+      const photoDataUrl = await compressImageFile(files[i], 480, 0.72);
+      list.push({
+        id: "sphoto_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+        photo: photoDataUrl,
+        meetingId: null,
+        sourcingId: null,
+        timestamp: new Date().toISOString()
+      });
+      addedCount++;
+    } catch (e) {
+      // skip a file that fails to process, keep going with the rest
+    }
+  }
+  await saveSessionPhotos(list);
+  showToast(addedCount + (addedCount === 1 ? " photo" : " photos") + " uploaded.", "success");
+  renderPhotoGallery();
 }
 
 // ---------------------------------------------------------------
@@ -3885,14 +4032,8 @@ async function renderSourcingDetail(sourcingId) {
   if (sourcingQuotes.length === 0) {
     quotesContainer.innerHTML = '<div class="log-empty"><div class="icon">&#128203;</div>No quotes saved to this sourcing yet.</div>';
   } else {
-    quotesContainer.innerHTML = sourcingQuotes.map(function(q) {
-      const headline = (q.prices && q.prices[0]) ? fmt(q.prices[0].msrp) + " MSRP" : "No pricing yet";
-      return '<div class="meeting-row">' +
-        '<div class="meeting-row-info">' +
-          '<div class="meeting-row-name">' + escapeHtml(q.item || "(no item #)") + '</div>' +
-          '<div class="meeting-row-sub">' + escapeHtml(q.vendor || "") + ' &middot; ' + escapeHtml(headline) + '</div>' +
-        '</div>' +
-      '</div>';
+    quotesContainer.innerHTML = sourcingQuotes.map(function(q, idx) {
+      return buildExpandableQuoteRow(q, idx, "qrow_sourcing_" + q.id);
     }).join("");
   }
 
@@ -3914,14 +4055,24 @@ async function renderSourcingDetail(sourcingId) {
     }).join("");
   }
 
+  const sessionPhotosAllS = await getSessionPhotos();
+  const sourcingSessionPhotos = sessionPhotosAllS.filter(function(p) { return p.sourcingId === sourcingId; });
+
   const photosContainer = document.getElementById("sourcing-detail-photos");
-  const sourcingPhotos = sourcingQuotes.filter(function(q) { return q.photo; });
-  if (sourcingPhotos.length === 0) {
+  const sourcingQuotePhotos = sourcingQuotes.filter(function(q) { return q.photo; });
+  const totalPhotoCountS = sourcingQuotePhotos.length + sourcingSessionPhotos.length;
+  if (totalPhotoCountS === 0) {
     photosContainer.innerHTML = '<div class="log-empty"><div class="icon">&#128247;</div>No photos yet.</div>';
   } else {
-    photosContainer.innerHTML = '<div class="photo-gallery-grid">' + sourcingPhotos.map(function(q) {
-      return '<div class="photo-gallery-tile"><img src="' + q.photo + '" alt=""></div>';
-    }).join("") + '</div>';
+    const quoteTilesS = sourcingQuotePhotos.map(function(q) {
+      return '<div class="photo-gallery-tile"><img src="' + q.photo + '" alt="" style="cursor:pointer;" onclick="openLightbox(\'' + q.photo + '\', event)"></div>';
+    }).join("");
+    const sessionTilesS = sourcingSessionPhotos.map(function(p) {
+      return '<div class="photo-gallery-tile"><img src="' + p.photo + '" alt="" style="cursor:pointer;" onclick="openLightbox(\'' + p.photo + '\', event)">' +
+        '<span class="photo-gallery-badge" style="background:rgba(166,92,70,0.85); cursor:pointer;" onclick="event.stopPropagation(); deleteSessionPhoto(\'' + p.id + '\', \'sourcing\', \'' + sourcingId + '\')">&#10005; Remove</span>' +
+      '</div>';
+    }).join("");
+    photosContainer.innerHTML = '<div class="photo-gallery-grid">' + sessionTilesS + quoteTilesS + '</div>';
   }
 }
 
@@ -3971,7 +4122,8 @@ async function downloadSourcingSummary() {
   try { suppliers = rawSuppliers ? JSON.parse(rawSuppliers) : []; } catch (e) { suppliers = []; }
   const sourcingSuppliers = suppliers.filter(function(s) { return s.sourcingId === sourcing.id; });
 
-  const photoCount = sourcingQuotes.filter(function(q) { return q.photo; }).length;
+  const sourcingSessionPhotosForDownload = (await getSessionPhotos()).filter(function(p) { return p.sourcingId === sourcing.id; });
+  const photoCount = sourcingQuotes.filter(function(q) { return q.photo; }).length + sourcingSessionPhotosForDownload.length;
   const catLabel = (sourcing.categories || []).join(" + ") || "Not set";
 
   let lines = [];
@@ -4049,7 +4201,7 @@ async function createAlbum(name) {
 }
 
 async function addPhotoRefToAlbum(sourceType, sourceId, albumId) {
-  const storageKey = sourceType === "quote" ? "nextex_quotes" : "nextex_suppliers";
+  const storageKey = sourceType === "quote" ? "nextex_quotes" : (sourceType === "session" ? "nextex_session_photos" : "nextex_suppliers");
   const raw = await storageGet(storageKey);
   let list = [];
   try { list = raw ? JSON.parse(raw) : []; } catch (e) { list = []; }
@@ -4059,6 +4211,41 @@ async function addPhotoRefToAlbum(sourceType, sourceId, albumId) {
   if (entry.albumIds.indexOf(albumId) === -1) entry.albumIds.push(albumId);
   await storageSet(storageKey, JSON.stringify(list));
 }
+
+function photoStorageKey(sourceType) {
+  return sourceType === "quote" ? "nextex_quotes" : (sourceType === "session" ? "nextex_session_photos" : "nextex_suppliers");
+}
+
+async function removePhotoFromAlbum(sourceType, sourceId, albumId) {
+  const storageKey = photoStorageKey(sourceType);
+  const raw = await storageGet(storageKey);
+  let list = [];
+  try { list = raw ? JSON.parse(raw) : []; } catch (e) { list = []; }
+  const entry = list.find(function(e) { return e.id === sourceId; });
+  if (!entry || !entry.albumIds) return;
+  entry.albumIds = entry.albumIds.filter(function(id) { return id !== albumId; });
+  await storageSet(storageKey, JSON.stringify(list));
+}
+
+async function deletePhotoPermanently(sourceType, sourceId) {
+  const storageKey = photoStorageKey(sourceType);
+  const raw = await storageGet(storageKey);
+  let list = [];
+  try { list = raw ? JSON.parse(raw) : []; } catch (e) { list = []; }
+
+  if (sourceType === "session") {
+    // Session photos are standalone entries -- delete the entry entirely.
+    list = list.filter(function(e) { return e.id !== sourceId; });
+  } else {
+    // Quote/supplier photos are embedded on a larger record -- only clear
+    // the photo itself, never delete the underlying quote or supplier.
+    const entry = list.find(function(e) { return e.id === sourceId; });
+    if (entry) entry.photo = "";
+  }
+  await storageSet(storageKey, JSON.stringify(list));
+  if (storageKey === "nextex_suppliers") await refreshSupplierCache();
+}
+
 
 async function openAlbumsHome() {
   document.getElementById("hamburger-drawer").classList.remove("show");
@@ -4095,9 +4282,11 @@ async function renderAlbumsHome() {
   const rawSuppliers = await storageGet("nextex_suppliers");
   let suppliers = [];
   try { suppliers = rawSuppliers ? JSON.parse(rawSuppliers) : []; } catch (e) { suppliers = []; }
+  const sessionPhotosForAlbums = await getSessionPhotos();
 
   const allPhotoEntries = quotes.filter(function(q) { return q.photo; })
-    .concat(suppliers.filter(function(s) { return s.photo; }));
+    .concat(suppliers.filter(function(s) { return s.photo; }))
+    .concat(sessionPhotosForAlbums.filter(function(p) { return p.photo; }));
 
   grid.innerHTML = '<div class="albums-grid">' + albums.map(function(a) {
     const members = allPhotoEntries.filter(function(e) { return (e.albumIds || []).indexOf(a.id) !== -1; });
@@ -4192,6 +4381,10 @@ async function renderPhotoGallery() {
     return match ? match.key : null;
   }
 
+  const sessionPhotos = await getSessionPhotos();
+  const meetingsForLabels = await getMeetings();
+  const sourcingForLabels = await getSourcingList();
+
   galleryPhotos = [];
   quotes.forEach(function(q) {
     if (q.photo) {
@@ -4201,6 +4394,8 @@ async function renderPhotoGallery() {
         quoteId: q.id,
         supplierId: findSupplierIdByVendor(q.vendor),
         cartKey: findCartKeyByItemVendor(q.item, q.vendor),
+        meetingId: q.meetingId || null,
+        sourcingId: q.sourcingId || null,
         albumIds: q.albumIds || [],
         customer: q.customer || "",
         category: q.category === "cushions" ? "cushions" : "curtains"
@@ -4213,10 +4408,28 @@ async function renderPhotoGallery() {
         photo: s.photo, item: s.name || "(supplier)", vendor: "Business card", badge: "Supplier",
         sourceType: "supplier", sourceId: s.id,
         quoteId: null, supplierId: s.id, cartKey: null,
+        meetingId: null,
+        sourcingId: s.sourcingId || null,
         albumIds: s.albumIds || [],
         customer: "", category: ""
       });
     }
+  });
+  sessionPhotos.forEach(function(p) {
+    const meeting = p.meetingId ? meetingsForLabels.find(function(m) { return m.id === p.meetingId; }) : null;
+    const sourcing = p.sourcingId ? sourcingForLabels.find(function(s) { return s.id === p.sourcingId; }) : null;
+    const badge = p.meetingId ? "Meeting" : (p.sourcingId ? "Sourcing" : "Uploaded");
+    galleryPhotos.push({
+      photo: p.photo,
+      item: (meeting && meeting.name) || (sourcing && sourcing.name) || "(uploaded photo)",
+      vendor: "", badge: badge,
+      sourceType: "session", sourceId: p.id,
+      quoteId: null, supplierId: null, cartKey: null,
+      meetingId: p.meetingId || null,
+      sourcingId: p.sourcingId || null,
+      albumIds: p.albumIds || [],
+      customer: "", category: ""
+    });
   });
 
   // Populate the supplier filter dropdown from actual vendor names in use.
@@ -4407,6 +4620,85 @@ function downloadGalleryPhoto() {
   showToast("Downloading photo\u2026", "success");
 }
 
+function confirmDeleteGalleryPhoto() {
+  const p = galleryPhotos[galleryLightboxIndex];
+  if (!p) return;
+
+  if (currentGalleryAlbumFilter) {
+    const albumId = currentGalleryAlbumFilter;
+    showDeleteChoicePrompt(
+      "Delete this photo from just this album, or from the entire Gallery?",
+      async function() {
+        await removePhotoFromAlbum(p.sourceType, p.sourceId, albumId);
+        showToast("Removed from album.", "success");
+        closeGalleryLightbox();
+        renderPhotoGallery();
+      },
+      function() { deleteGalleryPhotoNow(p); }
+    );
+  } else {
+    confirmPermanentDeleteGalleryPhoto(p);
+  }
+}
+
+async function deleteGalleryPhotoNow(p) {
+  await deletePhotoPermanently(p.sourceType, p.sourceId);
+  showToast("Photo deleted.", "success");
+  closeGalleryLightbox();
+  renderPhotoGallery();
+}
+
+function confirmPermanentDeleteGalleryPhoto(p) {
+  showConfirm(
+    "Delete this photo permanently? It will be removed from the Gallery and every album it's in. This cannot be undone.",
+    function() { deleteGalleryPhotoNow(p); }
+  );
+}
+
+function confirmDeleteSelectedPhotos() {
+  if (selectedPhotoIndices.size === 0) {
+    showToast("Select at least one photo first.", "error");
+    return;
+  }
+  const indices = Array.from(selectedPhotoIndices);
+  const count = indices.length;
+  const label = count + (count === 1 ? " photo" : " photos");
+
+  if (currentGalleryAlbumFilter) {
+    const albumId = currentGalleryAlbumFilter;
+    showDeleteChoicePrompt(
+      "Delete " + label + " from just this album, or from the entire Gallery?",
+      async function() {
+        for (let i = 0; i < indices.length; i++) {
+          const p = galleryPhotos[indices[i]];
+          await removePhotoFromAlbum(p.sourceType, p.sourceId, albumId);
+        }
+        showToast(label + " removed from album.", "success");
+        cancelGallerySelectMode();
+      },
+      function() { deleteSelectedPhotosNow(indices, label); }
+    );
+  } else {
+    confirmPermanentDeleteSelectedPhotos(indices, label);
+  }
+}
+
+async function deleteSelectedPhotosNow(indices, label) {
+  for (let i = 0; i < indices.length; i++) {
+    const p = galleryPhotos[indices[i]];
+    await deletePhotoPermanently(p.sourceType, p.sourceId);
+  }
+  showToast(label + " deleted.", "success");
+  cancelGallerySelectMode();
+}
+
+function confirmPermanentDeleteSelectedPhotos(indices, label) {
+  showConfirm(
+    "Delete " + label + " permanently? They'll be removed from the Gallery and every album they're in. This cannot be undone.",
+    function() { deleteSelectedPhotosNow(indices, label); }
+  );
+}
+
 function openGalleryLightbox(index) {
   galleryLightboxIndex = index;
   showGalleryLightboxPhoto();
@@ -4427,6 +4719,8 @@ function showGalleryLightboxPhoto() {
   document.getElementById("swipe-lightbox-goto-quote-btn").style.display = p.quoteId ? "block" : "none";
   document.getElementById("swipe-lightbox-goto-supplier-btn").style.display = p.supplierId ? "block" : "none";
   document.getElementById("swipe-lightbox-goto-cart-btn").style.display = p.cartKey ? "block" : "none";
+  document.getElementById("swipe-lightbox-goto-meeting-btn").style.display = p.meetingId ? "block" : "none";
+  document.getElementById("swipe-lightbox-goto-sourcing-btn").style.display = p.sourcingId ? "block" : "none";
 }
 
 function goToQuoteFromGallery() {
@@ -4497,6 +4791,24 @@ function goToCustomerQuoteFromGallery() {
     }
     row.scrollIntoView({ behavior: "smooth", block: "start" });
   }, 150);
+}
+
+function goToMeetingFromGallery() {
+  const p = galleryPhotos[galleryLightboxIndex];
+  if (!p || !p.meetingId) return;
+  const meetingId = p.meetingId;
+  closeGalleryLightbox();
+  document.getElementById("tabbar").style.display = "flex";
+  openMeetingDetail(meetingId);
+}
+
+function goToSourcingFromGallery() {
+  const p = galleryPhotos[galleryLightboxIndex];
+  if (!p || !p.sourcingId) return;
+  const sourcingId = p.sourcingId;
+  closeGalleryLightbox();
+  document.getElementById("tabbar").style.display = "flex";
+  openSourcingDetail(sourcingId);
 }
 
 
@@ -5762,9 +6074,37 @@ function sortAndFilterQuotes(list) {
     }
   }
 
+  const sortSettings = (savedSortBy === "price_asc" || savedSortBy === "price_desc") ? getSettings() : null;
+
+  function headlineUsdForSort(entry) {
+    const headline = (entry.prices && entry.prices[0]) ? entry.prices[0] : null;
+    if (headline) return headline.usd;
+    if (entry.category === "cushions") {
+      const cushionPrice = computeCushionPriceForEntry(entry, sortSettings);
+      if (cushionPrice) return cushionPrice.usd;
+    }
+    return null;
+  }
+
   return filtered.slice().sort(function(a, b) {
     if (savedSortBy === "vendor") {
       return (a.vendor || "").toLowerCase().localeCompare((b.vendor || "").toLowerCase());
+    }
+    if (savedSortBy === "customer") {
+      const ac = (a.customer || "").toLowerCase();
+      const bc = (b.customer || "").toLowerCase();
+      if (ac && bc) return ac.localeCompare(bc);
+      if (ac) return -1;
+      if (bc) return 1;
+      return 0;
+    }
+    if (savedSortBy === "price_asc" || savedSortBy === "price_desc") {
+      const av = headlineUsdForSort(a);
+      const bv = headlineUsdForSort(b);
+      if (av === null && bv === null) return 0;
+      if (av === null) return 1; // no pricing yet always sorts last
+      if (bv === null) return -1;
+      return savedSortBy === "price_asc" ? (av - bv) : (bv - av);
     }
     if (savedSortBy === "date") {
       const at = parseInt((a.id || "q_0").replace("q_", ""), 10) || 0;
@@ -5935,7 +6275,7 @@ async function renderLog() {
     const typeBadgeText = entry.category === "cushions" ? "Cushion" : (entry.curtainType || "");
     let headlineHtml;
     if (headline) {
-      headlineHtml = '<span class="v">' + fmt(headline.msrp) + '</span><span class="l">MSRP &middot; ' + headline.label + '</span>';
+      headlineHtml = '<span class="v">' + fmt(headline.usd) + '</span><span class="l">Factory Cost &middot; ' + headline.label + '</span>';
     } else if (cushionPrice) {
       headlineHtml = '<span class="v">' + fmt(cushionPrice.usd) + '</span><span class="l">Shell &middot; ' + (CUSHION_SIZE_LABELS[entry.cushionSize] || entry.cushionSize || "") + '</span>';
     } else {
@@ -5973,6 +6313,38 @@ async function renderLog() {
   container.appendChild(clearBtn);
 
   renderSavedTable();
+}
+
+function buildExpandableQuoteRow(entry, idx, rowId) {
+  const detailHtml = buildQuoteDetailHtml(entry);
+  const headline = (entry.prices && entry.prices[0]) ? entry.prices[0] : null;
+  const cushionPrice = (!headline && entry.category === "cushions") ? computeCushionPriceForEntry(entry, getSettings()) : null;
+  const typeBadgeText = entry.category === "cushions" ? "Cushion" : (entry.curtainType || "");
+  let headlineHtml;
+  if (headline) {
+    headlineHtml = '<span class="v">' + fmt(headline.usd) + '</span><span class="l">Factory Cost &middot; ' + headline.label + '</span>';
+  } else if (cushionPrice) {
+    headlineHtml = '<span class="v">' + fmt(cushionPrice.usd) + '</span><span class="l">Shell &middot; ' + (CUSHION_SIZE_LABELS[entry.cushionSize] || entry.cushionSize || "") + '</span>';
+  } else {
+    headlineHtml = '<span class="v" style="font-size:12px;">No pricing yet</span>';
+  }
+  const thumbHtml = entry.photo
+    ? '<img class="quote-thumb" src="' + entry.photo + '" alt="" style="cursor:pointer;" onclick="event.stopPropagation(); openLightbox(\'' + entry.photo + '\', event)">'
+    : '<span class="quote-thumb quote-thumb-empty">&#128247;</span>';
+
+  return '<div class="quote-row" id="' + rowId + '">' +
+    '<div class="quote-main-line" onclick="document.getElementById(\'' + rowId + '\').classList.toggle(\'open\')">' +
+      '<span class="quote-num">' + (idx + 1) + '</span>' +
+      thumbHtml +
+      '<span class="quote-chevron">&#9656;</span>' +
+      '<div class="quote-id-block">' +
+        '<div class="quote-style">' + escapeHtml(entry.item || "(no item #)") + (typeBadgeText ? '<span class="type-badge">' + escapeHtml(typeBadgeText) + '</span>' : '') + '</div>' +
+        '<div class="quote-vendor">' + escapeHtml(entry.vendor) + '</div>' +
+      '</div>' +
+      '<div class="quote-headline">' + headlineHtml + '</div>' +
+    '</div>' +
+    '<div class="quote-detail">' + detailHtml + '</div>' +
+  '</div>';
 }
 
 function toggleQuoteRow(id) {
@@ -6083,7 +6455,7 @@ async function renderGalleryView() {
     const headline = (entry.prices && entry.prices[0]) ? entry.prices[0] : null;
     const cushionPrice = (!headline && entry.category === "cushions") ? computeCushionPriceForEntry(entry, s) : null;
     let priceLine = "";
-    if (headline) priceLine = fmt(headline.msrp) + " MSRP";
+    if (headline) priceLine = fmt(headline.usd) + " Factory Cost";
     else if (cushionPrice) priceLine = fmt(cushionPrice.usd) + " Shell";
     const typeBadgeText = entry.category === "cushions" ? "Cushion" : (entry.curtainType || "Curtain");
 
