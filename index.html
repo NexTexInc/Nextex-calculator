@@ -1104,6 +1104,9 @@
         </div>
         <input type="file" id="item-qr-input" accept="image/*" capture="environment" style="display:none;" onchange="handleItemQRScanned(event)">
         <div class="field-hint" id="item-qr-status"></div>
+        <div id="item-qr-debug" style="display:none; margin-top:8px;">
+          <img id="item-qr-debug-img" style="max-width:100%; border-radius:8px; border:1.5px solid var(--border);">
+        </div>
       </div>
       <div class="field-row">
         <div class="field">
@@ -2251,6 +2254,13 @@ async function handleItemQRScanned(event) {
       image.src = dataUrl;
     });
 
+    // Diagnostic: show exactly what was captured, since this has been hard
+    // to reproduce remotely. Visible every time, temporarily, while we
+    // track this down.
+    document.getElementById("item-qr-debug").style.display = "block";
+    document.getElementById("item-qr-debug-img").src = dataUrl;
+    statusEl.textContent = "Captured photo: " + img.width + "\u00d7" + img.height + "px. Scanning\u2026";
+
     // Try at increasing resolutions: fast first pass, then progressively
     // larger re-attempts if the QR code turns out to be small/blurry/
     // compressed in the frame. A capped-too-low first pass was the actual
@@ -2302,7 +2312,7 @@ async function handleItemQRScanned(event) {
       statusEl.textContent = "QR code scanned successfully.";
       showToast("Item / style # filled from QR code.", "success");
     } else {
-      statusEl.textContent = "No QR code found \u2014 try again with the code centered and in focus.";
+      statusEl.textContent = "No QR code found in a " + img.width + "\u00d7" + img.height + "px photo \u2014 see preview below. Try again with the code centered and in focus.";
       showToast("No QR code found in that photo.", "error");
     }
   } catch (e) {
