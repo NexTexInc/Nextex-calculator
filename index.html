@@ -140,6 +140,29 @@
     cursor: pointer;
   }
   .hamburger-menu-item:active { background: var(--cream); }
+  .hamburger-chevron { flex-shrink: 0; font-size: 11px; color: var(--terracotta-dark); transition: transform 0.15s ease; }
+  .hamburger-chevron.open { transform: rotate(180deg); }
+  .hamburger-submenu { background: var(--cream); }
+  .hamburger-submenu.nested { padding-left: 18px; }
+  .hamburger-submenu-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: none;
+    border: none;
+    padding: 12px 20px 12px 40px;
+    text-align: left;
+    font-family: "Century Gothic", "Apple Gothic", AppleGothic, sans-serif;
+    font-size: 12.5px;
+    font-weight: 700;
+    text-transform: none;
+    letter-spacing: 0.2px;
+    color: var(--navy);
+    cursor: pointer;
+  }
+  .hamburger-submenu-item:active { background: white; }
+  .hamburger-submenu.nested .hamburger-submenu-item { padding-left: 40px; font-weight: 400; color: var(--text-secondary); }
 
   .cq-back-header { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
   .cq-back-btn {
@@ -209,6 +232,38 @@
     background: white;
     color: var(--navy);
   }
+  .gallery-clear-filters-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: white;
+    border: 1.5px solid var(--rust);
+    border-radius: 16px;
+    padding: 6px 12px;
+    font-family: "Century Gothic", "Apple Gothic", AppleGothic, sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--rust);
+    cursor: pointer;
+    margin-bottom: 10px;
+  }
+  .gallery-download-all-btn {
+    display: block;
+    width: 100%;
+    background: white;
+    border: 1.5px solid var(--navy);
+    border-radius: 10px;
+    padding: 11px 0;
+    font-family: "Century Gothic", "Apple Gothic", AppleGothic, sans-serif;
+    font-size: 12.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--navy);
+    cursor: pointer;
+    margin-bottom: 12px;
+    box-shadow: 2px 3px 6px rgba(0,17,44,0.10);
+  }
   .gallery-album-chip {
     flex-shrink: 0;
     background: white;
@@ -222,6 +277,32 @@
     cursor: pointer;
     white-space: nowrap;
   }
+
+  .meeting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 8px;
+    cursor: pointer;
+  }
+  .meeting-row-info { min-width: 0; flex: 1; }
+  .meeting-row-name { font-size: 13.5px; font-weight: 700; color: var(--navy); }
+  .meeting-row-sub { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+  .meeting-status-badge {
+    flex-shrink: 0;
+    font-size: 9.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 10px;
+  }
+  .meeting-status-badge.active { background: var(--pair-bg); color: var(--terracotta-dark); }
+  .meeting-status-badge.finalized { background: #E4E9D8; color: var(--green); }
 
   .gallery-select-bar {
     position: fixed;
@@ -344,6 +425,7 @@
     box-shadow: 2px 3px 6px rgba(0,0,0,0.3);
     min-width: 200px;
   }
+  .swipe-lightbox-goto-btn.download { background: white; color: var(--navy); border: 1.5px solid rgba(255,255,255,0.6); }
   .hamburger-menu-item svg { flex-shrink: 0; color: var(--terracotta-dark); }
   .header-divider { width: 1px; height: 22px; background: rgba(255,255,255,0.25); flex-shrink: 0; }
   .brand-logo-text { height: 24px; display: block; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.25)); flex-shrink: 0; }
@@ -1140,14 +1222,46 @@
   <div class="hamburger-backdrop" id="hamburger-backdrop" onclick="toggleHamburgerMenu()"></div>
   <div class="hamburger-drawer" id="hamburger-drawer">
     <div class="hamburger-drawer-header">Menu</div>
-    <button type="button" class="hamburger-menu-item" onclick="openPhotoGallery()">
+
+    <button type="button" class="hamburger-menu-item" onclick="toggleHamburgerSubmenu('gallery')">
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg>
-      <span>Photo Gallery</span>
+      <span style="flex:1;">Photo Gallery</span>
+      <span class="hamburger-chevron" id="hamburger-chevron-gallery">&#9662;</span>
     </button>
-    <button type="button" class="hamburger-menu-item" onclick="openAlbumsHome()">
-      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-      <span>Albums</span>
+    <div class="hamburger-submenu" id="hamburger-submenu-gallery" style="display:none;">
+      <button type="button" class="hamburger-submenu-item" onclick="openPhotoGallery()">All</button>
+
+      <button type="button" class="hamburger-submenu-item" onclick="toggleHamburgerSubmenu('albums')">
+        <span style="flex:1;">Albums</span>
+        <span class="hamburger-chevron" id="hamburger-chevron-albums">&#9662;</span>
+      </button>
+      <div class="hamburger-submenu nested" id="hamburger-submenu-albums" style="display:none;">
+        <button type="button" class="hamburger-submenu-item" onclick="openAlbumsHome()">View all albums &#8594;</button>
+        <div id="hamburger-albums-list"></div>
+      </div>
+    </div>
+
+    <button type="button" class="hamburger-menu-item" onclick="toggleHamburgerSubmenu('meetings')">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"></path></svg>
+      <span style="flex:1;">Meetings</span>
+      <span class="hamburger-chevron" id="hamburger-chevron-meetings">&#9662;</span>
     </button>
+    <div class="hamburger-submenu" id="hamburger-submenu-meetings" style="display:none;">
+      <button type="button" class="hamburger-submenu-item" onclick="openNewMeetingForm()">New Meeting</button>
+      <button type="button" class="hamburger-submenu-item" onclick="openMeetingsHome()">All Meetings &#8594;</button>
+      <div id="hamburger-active-meeting-item"></div>
+    </div>
+
+    <button type="button" class="hamburger-menu-item" onclick="toggleHamburgerSubmenu('sourcing')">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="M21 21l-4.35-4.35"></path></svg>
+      <span style="flex:1;">Sourcing</span>
+      <span class="hamburger-chevron" id="hamburger-chevron-sourcing">&#9662;</span>
+    </button>
+    <div class="hamburger-submenu" id="hamburger-submenu-sourcing" style="display:none;">
+      <button type="button" class="hamburger-submenu-item" onclick="openNewSourcingForm()">New Sourcing</button>
+      <button type="button" class="hamburger-submenu-item" onclick="openSourcingHome()">All Sourcing &#8594;</button>
+      <div id="hamburger-active-sourcing-item"></div>
+    </div>
   </div>
 
   <div class="header">
@@ -1202,6 +1316,7 @@
       <div class="item" id="swipe-lightbox-item"></div>
       <div class="vendor" id="swipe-lightbox-vendor"></div>
       <div class="swipe-lightbox-btn-row">
+        <button type="button" class="swipe-lightbox-goto-btn download" onclick="downloadGalleryPhoto()">&#8595; Download photo</button>
         <button type="button" class="swipe-lightbox-goto-btn" id="swipe-lightbox-goto-quote-btn" onclick="goToQuoteFromGallery()" style="display:none;">Take me to Quote</button>
         <button type="button" class="swipe-lightbox-goto-btn" id="swipe-lightbox-goto-supplier-btn" onclick="goToSupplierFromGallery()" style="display:none;">Go to Supplier</button>
         <button type="button" class="swipe-lightbox-goto-btn" id="swipe-lightbox-goto-cart-btn" onclick="goToCustomerQuoteFromGallery()" style="display:none;">Go to Customer Quote</button>
@@ -1772,6 +1887,8 @@
       </div>
       <div class="field-hint" style="margin-bottom:10px;">Every photo you've taken across Saved Quotes and Suppliers, in one place.</div>
 
+      <button type="button" class="gallery-download-all-btn" id="gallery-download-all-btn" onclick="downloadAlbumPhotos()" style="display:none;">&#8595; Download all photos in this album</button>
+
       <div id="gallery-album-row" class="gallery-album-row"></div>
 
       <div id="gallery-filter-row" class="gallery-filter-row">
@@ -1793,6 +1910,7 @@
           <option value="cushions">Cushions</option>
         </select>
       </div>
+      <button type="button" class="gallery-clear-filters-btn" id="gallery-clear-filters-btn" onclick="clearGalleryFilters()" style="display:none;">&#10005; Clear filters</button>
 
       <div style="display:flex; justify-content:flex-end; margin-bottom:8px;">
         <button type="button" class="cq-back-btn" id="gallery-select-toggle" onclick="toggleGallerySelectMode()">Select photos</button>
@@ -1819,6 +1937,200 @@
       </div>
       <div class="field-hint" style="margin-bottom:14px;">Group photos from a trade show, a supplier, or however you like &mdash; a photo can be in more than one album.</div>
       <div id="albums-grid"></div>
+    </div>
+  </div>
+
+  <!-- NEW MEETING FORM SCREEN -->
+  <div class="screen" id="screen-new-meeting">
+    <div class="content">
+      <div class="cq-back-header">
+        <button type="button" class="cq-back-btn" onclick="closeNewMeetingForm()">&#8592; Back</button>
+        <span class="section-label" style="margin:0;">New Meeting</span>
+      </div>
+
+      <div class="field">
+        <label for="new-meeting-name">Meeting name</label>
+        <input type="text" id="new-meeting-name" placeholder="e.g. Walmart Fabric Review">
+      </div>
+
+      <div class="field">
+        <label for="new-meeting-customer">Customer</label>
+        <select id="new-meeting-customer">
+          <option value="">Select customer&#8230;</option>
+          <option value="Walmart Canada">Walmart Canada</option>
+          <option value="Homesense">Homesense</option>
+          <option value="Winners Marshalls">Winners Marshalls</option>
+          <option value="Costco">Costco</option>
+          <option value="Ross Stores">Ross Stores</option>
+          <option value="Home Depot">Home Depot</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Category</label>
+        <div class="chip-group" id="new-meeting-category-group"></div>
+        <div class="chip-group" style="margin-top:8px;">
+          <button type="button" class="chip" onclick="showAddMeetingCategoryInput()">+ Add category</button>
+        </div>
+        <div id="new-meeting-category-add-row" style="display:none; margin-top:8px;">
+          <div class="clearable-input-wrap">
+            <input type="text" id="new-meeting-category-input" placeholder="New category name">
+          </div>
+          <button type="button" class="btn btn-clear-partial" style="margin-top:8px;" onclick="addNewMeetingCategory()">Add</button>
+        </div>
+        <div class="field-hint">Select all that apply if the meeting covers more than one.</div>
+      </div>
+
+      <div class="field note-field">
+        <label for="new-meeting-notes">Notes</label>
+        <textarea id="new-meeting-notes" placeholder="Optional details..."></textarea>
+      </div>
+
+      <button type="button" class="btn btn-save" onclick="startNewMeeting()">Start meeting</button>
+    </div>
+  </div>
+
+  <!-- MEETINGS HOME SCREEN -->
+  <div class="screen" id="screen-meetings-home">
+    <div class="content">
+      <div class="cq-back-header">
+        <button type="button" class="cq-back-btn" onclick="closeMeetingsHome()">&#8592; Back</button>
+        <span class="section-label" style="margin:0;">Meetings</span>
+      </div>
+      <div id="meetings-home-list"></div>
+    </div>
+  </div>
+
+  <!-- MEETING DETAIL SCREEN -->
+  <div class="screen" id="screen-meeting-detail">
+    <div class="content">
+      <div class="cq-back-header">
+        <button type="button" class="cq-back-btn" onclick="closeMeetingDetail()">&#8592; Back</button>
+        <span class="section-label" style="margin:0;" id="meeting-detail-title">Meeting</span>
+      </div>
+      <div id="meeting-detail-meta"></div>
+
+      <div class="field note-field">
+        <label for="meeting-detail-notes">Notes</label>
+        <textarea id="meeting-detail-notes" placeholder="Optional details..." onchange="saveMeetingDetailNotes()"></textarea>
+      </div>
+
+      <div class="field-row">
+        <button type="button" class="btn btn-clear-partial" id="meeting-finalize-btn" onclick="toggleMeetingFinalized()" style="flex:1;"></button>
+        <button type="button" class="btn btn-clear-partial" onclick="downloadMeetingSummary()" style="flex:1;">Download summary</button>
+      </div>
+
+      <p class="section-label" style="margin-top:20px;">Quotes in this meeting</p>
+      <div id="meeting-detail-quotes"></div>
+
+      <p class="section-label" style="margin-top:20px;">Customer quote items from this meeting</p>
+      <div id="meeting-detail-cart"></div>
+
+      <p class="section-label" style="margin-top:20px;">Photos from this meeting</p>
+      <div id="meeting-detail-photos"></div>
+    </div>
+  </div>
+
+  <!-- NEW SOURCING FORM SCREEN -->
+  <div class="screen" id="screen-new-sourcing">
+    <div class="content">
+      <div class="cq-back-header">
+        <button type="button" class="cq-back-btn" onclick="closeNewSourcingForm()">&#8592; Back</button>
+        <span class="section-label" style="margin:0;">New Sourcing</span>
+      </div>
+
+      <div class="field">
+        <label for="new-sourcing-name">Sourcing name</label>
+        <input type="text" id="new-sourcing-name" placeholder="e.g. Fall Rug Sourcing Trip">
+      </div>
+
+      <div class="field">
+        <label>Sourcing type</label>
+        <div class="chip-group" id="new-sourcing-type-group">
+          <button type="button" class="chip selected" data-type="tradeshow" onclick="setNewSourcingType('tradeshow')">Trade Show</button>
+          <button type="button" class="chip" data-type="factory" onclick="setNewSourcingType('factory')">Factory Visit</button>
+          <button type="button" class="chip" data-type="market" onclick="setNewSourcingType('market')">Market</button>
+        </div>
+      </div>
+
+      <div class="field" id="new-sourcing-event-field">
+        <label for="new-sourcing-event" id="new-sourcing-event-label">Event / Trip</label>
+        <input type="text" id="new-sourcing-event" placeholder="e.g. Canton Fair 2026">
+      </div>
+
+      <div class="field" id="new-sourcing-supplier-field" style="display:none; position:relative;">
+        <label for="new-sourcing-supplier">Supplier</label>
+        <div class="vendor-input-wrap">
+          <input type="text" id="new-sourcing-supplier" placeholder="Type new, or select existing" autocomplete="off"
+                 oninput="showNewSourcingSupplierSuggestions()" onfocus="showNewSourcingSupplierSuggestions()" onblur="hideNewSourcingSupplierSuggestionsDelayed()">
+          <button type="button" class="input-clear-btn" id="new-sourcing-supplier-clear-btn" style="display:none;" onmousedown="event.preventDefault(); clearNewSourcingSupplierField();">&#10005;</button>
+        </div>
+        <div class="field-hint">Pick a factory you've visited before, or type a new one.</div>
+        <div id="new-sourcing-supplier-suggestions" class="suggestion-dropdown" style="display:none;"></div>
+      </div>
+
+      <div class="field">
+        <label>Category</label>
+        <div class="chip-group" id="new-sourcing-category-group"></div>
+        <div class="chip-group" style="margin-top:8px;">
+          <button type="button" class="chip" onclick="showAddSourcingCategoryInput()">+ Add category</button>
+        </div>
+        <div id="new-sourcing-category-add-row" style="display:none; margin-top:8px;">
+          <div class="clearable-input-wrap">
+            <input type="text" id="new-sourcing-category-input" placeholder="New category name">
+          </div>
+          <button type="button" class="btn btn-clear-partial" style="margin-top:8px;" onclick="addNewSourcingCategory()">Add</button>
+        </div>
+        <div class="field-hint">Select all that apply if the trip covers more than one.</div>
+      </div>
+
+      <div class="field note-field">
+        <label for="new-sourcing-notes">Notes</label>
+        <textarea id="new-sourcing-notes" placeholder="Optional details..."></textarea>
+      </div>
+
+      <button type="button" class="btn btn-save" onclick="startNewSourcing()">Start sourcing</button>
+    </div>
+  </div>
+
+  <!-- SOURCING HOME SCREEN -->
+  <div class="screen" id="screen-sourcing-home">
+    <div class="content">
+      <div class="cq-back-header">
+        <button type="button" class="cq-back-btn" onclick="closeSourcingHome()">&#8592; Back</button>
+        <span class="section-label" style="margin:0;">Sourcing</span>
+      </div>
+      <div id="sourcing-home-list"></div>
+    </div>
+  </div>
+
+  <!-- SOURCING DETAIL SCREEN -->
+  <div class="screen" id="screen-sourcing-detail">
+    <div class="content">
+      <div class="cq-back-header">
+        <button type="button" class="cq-back-btn" onclick="closeSourcingDetail()">&#8592; Back</button>
+        <span class="section-label" style="margin:0;" id="sourcing-detail-title">Sourcing</span>
+      </div>
+      <div id="sourcing-detail-meta"></div>
+
+      <div class="field note-field">
+        <label for="sourcing-detail-notes">Notes</label>
+        <textarea id="sourcing-detail-notes" placeholder="Optional details..." onchange="saveSourcingDetailNotes()"></textarea>
+      </div>
+
+      <div class="field-row">
+        <button type="button" class="btn btn-clear-partial" id="sourcing-finalize-btn" onclick="toggleSourcingFinalized()" style="flex:1;"></button>
+        <button type="button" class="btn btn-clear-partial" onclick="downloadSourcingSummary()" style="flex:1;">Download summary</button>
+      </div>
+
+      <p class="section-label" style="margin-top:20px;">Quotes from this sourcing</p>
+      <div id="sourcing-detail-quotes"></div>
+
+      <p class="section-label" style="margin-top:20px;">New suppliers added during this sourcing</p>
+      <div id="sourcing-detail-suppliers"></div>
+
+      <p class="section-label" style="margin-top:20px;">Photos from this sourcing</p>
+      <div id="sourcing-detail-photos"></div>
     </div>
   </div>
 
@@ -1894,7 +2206,7 @@ function showToast(message, type) {
   toastTimer = setTimeout(function() { el.classList.remove("show"); }, 2600);
 }
 
-function showConfirm(message, onYes) {
+function showConfirm(message, onYes, onNo) {
   const banner = document.getElementById("confirm-banner");
   const msgEl = document.getElementById("confirm-message");
   const yesBtn = document.getElementById("confirm-yes");
@@ -1908,7 +2220,7 @@ function showConfirm(message, onYes) {
     noBtn.removeEventListener("click", onNoClick);
   }
   function onYesClick() { cleanup(); onYes(); }
-  function onNoClick() { cleanup(); }
+  function onNoClick() { cleanup(); if (onNo) onNo(); }
   yesBtn.addEventListener("click", onYesClick);
   noBtn.addEventListener("click", onNoClick);
 }
@@ -2608,7 +2920,919 @@ function toggleHamburgerMenu() {
   document.getElementById("hamburger-backdrop").classList.toggle("show");
 }
 
+async function toggleHamburgerSubmenu(which) {
+  const submenu = document.getElementById("hamburger-submenu-" + which);
+  const chevron = document.getElementById("hamburger-chevron-" + which);
+  const opening = submenu.style.display === "none";
+  submenu.style.display = opening ? "block" : "none";
+  chevron.classList.toggle("open", opening);
+  if (which === "albums" && opening) {
+    await renderHamburgerAlbumsList();
+  }
+  if (which === "meetings" && opening) {
+    await renderHamburgerActiveMeetingItem();
+  }
+  if (which === "sourcing" && opening) {
+    await renderHamburgerActiveSourcingItem();
+  }
+}
+
+async function renderHamburgerActiveMeetingItem() {
+  const container = document.getElementById("hamburger-active-meeting-item");
+  const meeting = await getActiveMeeting();
+  container.innerHTML = meeting
+    ? '<button type="button" class="hamburger-submenu-item" onclick="openMeetingDetail(\'' + meeting.id + '\')">Active: ' + escapeHtml(meeting.name) + '</button>'
+    : "";
+}
+
+async function renderHamburgerActiveSourcingItem() {
+  const container = document.getElementById("hamburger-active-sourcing-item");
+  const sourcing = await getActiveSourcing();
+  container.innerHTML = sourcing
+    ? '<button type="button" class="hamburger-submenu-item" onclick="openSourcingDetail(\'' + sourcing.id + '\')">Active: ' + escapeHtml(sourcing.name) + '</button>'
+    : "";
+}
+
+async function renderHamburgerAlbumsList() {
+  const container = document.getElementById("hamburger-albums-list");
+  const albums = await getAlbums();
+  container.innerHTML = albums.map(function(a) {
+    return '<button type="button" class="hamburger-submenu-item" onclick="openAlbumFromMenu(\'' + a.id + '\')">' + escapeHtml(a.name) + '</button>';
+  }).join("");
+}
+
+function openAlbumFromMenu(albumId) {
+  document.getElementById("hamburger-drawer").classList.remove("show");
+  document.getElementById("hamburger-backdrop").classList.remove("show");
+
+  const activeScreen = document.querySelector(".screen.active");
+  if (activeScreen) screenBeforeGallery = activeScreen.id.replace("screen-", "");
+
+  gallerySelectMode = false;
+  selectedPhotoIndices = new Set();
+  document.getElementById("gallery-select-toggle").style.display = "inline-block";
+  document.getElementById("gallery-select-bar").style.display = "none";
+
+  document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
+  document.getElementById("screen-gallery").classList.add("active");
+  document.getElementById("tabbar").style.display = "none";
+  currentGalleryAlbumFilter = albumId;
+  renderPhotoGallery();
+  window.scrollTo(0, 0);
+}
+
 let screenBeforeGallery = "calc";
+
+// ---------------------------------------------------------------
+// Meetings
+// ---------------------------------------------------------------
+let activeMeetingId = null;
+let screenBeforeMeetings = "calc";
+
+async function getMeetings() {
+  const raw = await storageGet("nextex_meetings");
+  try { return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
+}
+
+async function saveMeetings(meetings) {
+  await storageSet("nextex_meetings", JSON.stringify(meetings));
+}
+
+async function loadActiveMeetingId() {
+  const raw = await storageGet("nextex_active_meeting_id");
+  activeMeetingId = raw || null;
+}
+
+async function setActiveMeetingId(id) {
+  activeMeetingId = id || null;
+  await storageSet("nextex_active_meeting_id", activeMeetingId || "");
+}
+
+async function getActiveMeeting() {
+  if (!activeMeetingId) return null;
+  const meetings = await getMeetings();
+  return meetings.find(function(m) { return m.id === activeMeetingId; }) || null;
+}
+
+// ---------------------------------------------------------------
+// Sourcing (mirrors Meetings, but tagged to an Event/Trip instead
+// of a Customer -- for supplier-side trade shows and factory visits)
+// ---------------------------------------------------------------
+let activeSourcingId = null;
+let screenBeforeSourcing = "calc";
+
+async function getSourcingList() {
+  const raw = await storageGet("nextex_sourcing");
+  try { return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
+}
+
+async function saveSourcingList(list) {
+  await storageSet("nextex_sourcing", JSON.stringify(list));
+}
+
+async function loadActiveSourcingId() {
+  const raw = await storageGet("nextex_active_sourcing_id");
+  activeSourcingId = raw || null;
+}
+
+async function setActiveSourcingId(id) {
+  activeSourcingId = id || null;
+  await storageSet("nextex_active_sourcing_id", activeSourcingId || "");
+}
+
+async function getActiveSourcing() {
+  if (!activeSourcingId) return null;
+  const list = await getSourcingList();
+  return list.find(function(s) { return s.id === activeSourcingId; }) || null;
+}
+
+let selectedNewSourcingCategories = [];
+
+let selectedNewMeetingCategories = [];
+
+const DEFAULT_MEETING_CATEGORIES = ["Curtains", "Cushions", "Rugs", "Office Furniture", "Ottomans", "Throws", "Bedding"];
+
+async function getMeetingCategories() {
+  const raw = await storageGet("nextex_meeting_categories");
+  if (!raw) {
+    await storageSet("nextex_meeting_categories", JSON.stringify(DEFAULT_MEETING_CATEGORIES));
+    return DEFAULT_MEETING_CATEGORIES.slice();
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : DEFAULT_MEETING_CATEGORIES.slice();
+  } catch (e) {
+    return DEFAULT_MEETING_CATEGORIES.slice();
+  }
+}
+
+async function saveMeetingCategoriesList(list) {
+  await storageSet("nextex_meeting_categories", JSON.stringify(list));
+}
+
+async function renderNewMeetingCategoryChips() {
+  const container = document.getElementById("new-meeting-category-group");
+  const categories = await getMeetingCategories();
+  container.innerHTML = categories.map(function(cat) {
+    const isSelected = selectedNewMeetingCategories.indexOf(cat) !== -1;
+    return '<button type="button" class="chip' + (isSelected ? " selected" : "") + '" onclick="toggleNewMeetingCategory(this)">' + escapeHtml(cat) + '</button>';
+  }).join("");
+}
+
+function toggleNewMeetingCategory(btn) {
+  const cat = btn.textContent;
+  const idx = selectedNewMeetingCategories.indexOf(cat);
+  if (idx === -1) selectedNewMeetingCategories.push(cat);
+  else selectedNewMeetingCategories.splice(idx, 1);
+  btn.classList.toggle("selected");
+}
+
+function showAddMeetingCategoryInput() {
+  document.getElementById("new-meeting-category-add-row").style.display = "block";
+  document.getElementById("new-meeting-category-input").focus();
+}
+
+async function addNewMeetingCategory() {
+  const input = document.getElementById("new-meeting-category-input");
+  const name = input.value.trim();
+  if (!name) {
+    showToast("Enter a category name.", "error");
+    return;
+  }
+  const categories = await getMeetingCategories();
+  if (categories.some(function(c) { return c.toLowerCase() === name.toLowerCase(); })) {
+    showToast("That category already exists.", "error");
+    return;
+  }
+  categories.push(name);
+  await saveMeetingCategoriesList(categories);
+  selectedNewMeetingCategories.push(name);
+  input.value = "";
+  document.getElementById("new-meeting-category-add-row").style.display = "none";
+  await renderNewMeetingCategoryChips();
+  showToast("Category added.", "success");
+}
+
+function openNewMeetingForm() {
+  document.getElementById("hamburger-drawer").classList.remove("show");
+  document.getElementById("hamburger-backdrop").classList.remove("show");
+  const activeScreen = document.querySelector(".screen.active");
+  if (activeScreen) screenBeforeMeetings = activeScreen.id.replace("screen-", "");
+
+  document.getElementById("new-meeting-name").value = "";
+  document.getElementById("new-meeting-customer").value = "";
+  document.getElementById("new-meeting-notes").value = "";
+  selectedNewMeetingCategories = [];
+  document.getElementById("new-meeting-category-add-row").style.display = "none";
+  document.getElementById("new-meeting-category-input").value = "";
+
+  document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
+  document.getElementById("screen-new-meeting").classList.add("active");
+  document.getElementById("tabbar").style.display = "none";
+  renderNewMeetingCategoryChips();
+}
+
+function closeNewMeetingForm() {
+  document.getElementById("tabbar").style.display = "flex";
+  showScreen(screenBeforeMeetings);
+}
+
+async function startNewMeeting() {
+  const name = document.getElementById("new-meeting-name").value.trim();
+  if (!name) {
+    showToast("Enter a name for the meeting.", "error");
+    return;
+  }
+  const meeting = {
+    id: "mtg_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+    name: name,
+    customer: document.getElementById("new-meeting-customer").value || "",
+    categories: selectedNewMeetingCategories.slice(),
+    notes: document.getElementById("new-meeting-notes").value || "",
+    status: "active",
+    createdDate: new Date().toLocaleDateString(),
+    finalizedDate: null
+  };
+  const meetings = await getMeetings();
+  meetings.push(meeting);
+  await saveMeetings(meetings);
+  await setActiveMeetingId(meeting.id);
+  showToast("Meeting started.", "success");
+
+  document.getElementById("tabbar").style.display = "none";
+  openMeetingDetail(meeting.id, screenBeforeMeetings);
+}
+
+function openMeetingsHome() {
+  document.getElementById("hamburger-drawer").classList.remove("show");
+  document.getElementById("hamburger-backdrop").classList.remove("show");
+  const activeScreen = document.querySelector(".screen.active");
+  if (activeScreen) screenBeforeMeetings = activeScreen.id.replace("screen-", "");
+
+  document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
+  document.getElementById("screen-meetings-home").classList.add("active");
+  document.getElementById("tabbar").style.display = "none";
+  renderMeetingsHome();
+}
+
+function closeMeetingsHome() {
+  document.getElementById("tabbar").style.display = "flex";
+  showScreen(screenBeforeMeetings);
+}
+
+async function renderMeetingsHome() {
+  const container = document.getElementById("meetings-home-list");
+  const meetings = await getMeetings();
+  if (meetings.length === 0) {
+    container.innerHTML = '<div class="log-empty"><div class="icon">&#128197;</div>No meetings yet.<br>Start one from the hamburger menu.</div>';
+    return;
+  }
+  const sorted = meetings.slice().sort(function(a, b) {
+    if (a.status !== b.status) return a.status === "active" ? -1 : 1;
+    return b.createdDate.localeCompare(a.createdDate);
+  });
+  container.innerHTML = sorted.map(function(m) {
+    const catLabel = (m.categories || []).join(" + ") || "No category set";
+    return '<div class="meeting-row" onclick="openMeetingDetail(\'' + m.id + '\', \'meetings-home\')">' +
+      '<div class="meeting-row-info">' +
+        '<div class="meeting-row-name">' + escapeHtml(m.name) + '</div>' +
+        '<div class="meeting-row-sub">' + escapeHtml(m.customer || "No customer") + ' &middot; ' + escapeHtml(catLabel) + ' &middot; ' + escapeHtml(m.createdDate) + '</div>' +
+      '</div>' +
+      '<span class="meeting-status-badge ' + m.status + '">' + (m.status === "active" ? "Active" : "Finalized") + '</span>' +
+    '</div>';
+  }).join("");
+}
+
+let screenBeforeMeetingDetail = "calc";
+
+function openMeetingDetail(meetingId, cameFrom) {
+  document.getElementById("hamburger-drawer").classList.remove("show");
+  document.getElementById("hamburger-backdrop").classList.remove("show");
+  if (cameFrom) {
+    screenBeforeMeetingDetail = cameFrom;
+  } else {
+    const activeScreen = document.querySelector(".screen.active");
+    if (activeScreen) screenBeforeMeetingDetail = activeScreen.id.replace("screen-", "");
+  }
+
+  document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
+  document.getElementById("screen-meeting-detail").classList.add("active");
+  document.getElementById("tabbar").style.display = "none";
+  renderMeetingDetail(meetingId);
+}
+
+function closeMeetingDetail() {
+  if (screenBeforeMeetingDetail === "meetings-home") {
+    document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
+    document.getElementById("screen-meetings-home").classList.add("active");
+    renderMeetingsHome();
+    return;
+  }
+  document.getElementById("tabbar").style.display = "flex";
+  showScreen(screenBeforeMeetingDetail);
+}
+
+let currentMeetingDetailId = null;
+
+async function renderMeetingDetail(meetingId) {
+  currentMeetingDetailId = meetingId;
+  const meetings = await getMeetings();
+  const meeting = meetings.find(function(m) { return m.id === meetingId; });
+  if (!meeting) {
+    showToast("Could not find that meeting.", "error");
+    closeMeetingDetail();
+    return;
+  }
+
+  document.getElementById("meeting-detail-title").textContent = meeting.name;
+  const catLabel = (meeting.categories || []).join(" + ") || "No category set";
+  document.getElementById("meeting-detail-meta").innerHTML =
+    '<div class="field-hint" style="margin-bottom:14px;">' +
+      escapeHtml(meeting.customer || "No customer") + ' &middot; ' + escapeHtml(catLabel) + ' &middot; Started ' + escapeHtml(meeting.createdDate) +
+      (meeting.status === "finalized" ? ' &middot; Finalized ' + escapeHtml(meeting.finalizedDate || "") : "") +
+    '</div>';
+  document.getElementById("meeting-detail-notes").value = meeting.notes || "";
+
+  const finalizeBtn = document.getElementById("meeting-finalize-btn");
+  finalizeBtn.textContent = meeting.status === "active" ? "Finalize meeting" : "Reopen meeting";
+
+  // Quotes and photos tagged to this meeting -- empty until quotes start
+  // getting tagged, but this query is real and will populate automatically.
+  const rawQuotes = await storageGet("nextex_quotes");
+  let quotes = [];
+  try { quotes = rawQuotes ? JSON.parse(rawQuotes) : []; } catch (e) { quotes = []; }
+  const meetingQuotes = quotes.filter(function(q) { return q.meetingId === meetingId; });
+
+  const quotesContainer = document.getElementById("meeting-detail-quotes");
+  if (meetingQuotes.length === 0) {
+    quotesContainer.innerHTML = '<div class="log-empty"><div class="icon">&#128203;</div>No quotes saved to this meeting yet.</div>';
+  } else {
+    quotesContainer.innerHTML = meetingQuotes.map(function(q) {
+      const headline = (q.prices && q.prices[0]) ? fmt(q.prices[0].msrp) + " MSRP" : "No pricing yet";
+      return '<div class="meeting-row">' +
+        '<div class="meeting-row-info">' +
+          '<div class="meeting-row-name">' + escapeHtml(q.item || "(no item #)") + '</div>' +
+          '<div class="meeting-row-sub">' + escapeHtml(q.vendor || "") + ' &middot; ' + escapeHtml(headline) + '</div>' +
+        '</div>' +
+      '</div>';
+    }).join("");
+  }
+
+  const cartContainer = document.getElementById("meeting-detail-cart");
+  const meetingCartItems = customerCart.filter(function(c) { return c.meetingId === meetingId; });
+  if (meetingCartItems.length === 0) {
+    cartContainer.innerHTML = '<div class="log-empty"><div class="icon">&#128722;</div>No customer quote items from this meeting yet.</div>';
+  } else {
+    cartContainer.innerHTML = meetingCartItems.map(function(c) {
+      return '<div class="meeting-row">' +
+        '<div class="meeting-row-info">' +
+          '<div class="meeting-row-name">' + escapeHtml(c.item) + '</div>' +
+          '<div class="meeting-row-sub">' + escapeHtml(c.sizeLabel) + ' &middot; ' + fmt(c.sellPrice * c.qty) + '</div>' +
+        '</div>' +
+      '</div>';
+    }).join("");
+  }
+
+  const photosContainer = document.getElementById("meeting-detail-photos");
+  const meetingPhotos = meetingQuotes.filter(function(q) { return q.photo; });
+  if (meetingPhotos.length === 0) {
+    photosContainer.innerHTML = '<div class="log-empty"><div class="icon">&#128247;</div>No photos yet.</div>';
+  } else {
+    photosContainer.innerHTML = '<div class="photo-gallery-grid">' + meetingPhotos.map(function(q) {
+      return '<div class="photo-gallery-tile"><img src="' + q.photo + '" alt=""></div>';
+    }).join("") + '</div>';
+  }
+}
+
+async function saveMeetingDetailNotes() {
+  if (!currentMeetingDetailId) return;
+  const meetings = await getMeetings();
+  const meeting = meetings.find(function(m) { return m.id === currentMeetingDetailId; });
+  if (!meeting) return;
+  meeting.notes = document.getElementById("meeting-detail-notes").value;
+  await saveMeetings(meetings);
+}
+
+async function toggleMeetingFinalized() {
+  if (!currentMeetingDetailId) return;
+  const meetings = await getMeetings();
+  const meeting = meetings.find(function(m) { return m.id === currentMeetingDetailId; });
+  if (!meeting) return;
+
+  if (meeting.status === "active") {
+    meeting.status = "finalized";
+    meeting.finalizedDate = new Date().toLocaleDateString();
+    if (activeMeetingId === meeting.id) await setActiveMeetingId(null);
+    showToast("Meeting finalized.", "success");
+  } else {
+    meeting.status = "active";
+    meeting.finalizedDate = null;
+    await setActiveMeetingId(meeting.id);
+    showToast("Meeting reopened \u2014 it's active again.", "success");
+  }
+  await saveMeetings(meetings);
+  renderMeetingDetail(meeting.id);
+}
+
+async function downloadMeetingSummary() {
+  if (!currentMeetingDetailId) return;
+  const meetings = await getMeetings();
+  const meeting = meetings.find(function(m) { return m.id === currentMeetingDetailId; });
+  if (!meeting) return;
+
+  const rawQuotes = await storageGet("nextex_quotes");
+  let quotes = [];
+  try { quotes = rawQuotes ? JSON.parse(rawQuotes) : []; } catch (e) { quotes = []; }
+  const meetingQuotes = quotes.filter(function(q) { return q.meetingId === meeting.id; });
+  const meetingCartItems = customerCart.filter(function(c) { return c.meetingId === meeting.id; });
+  const photoCount = meetingQuotes.filter(function(q) { return q.photo; }).length;
+
+  const catLabel = (meeting.categories || []).join(" + ") || "Not set";
+
+  let lines = [];
+  lines.push("MEETING SUMMARY");
+  lines.push("=".repeat(40));
+  lines.push(meeting.name);
+  lines.push("Customer: " + (meeting.customer || "Not set"));
+  lines.push("Category: " + catLabel);
+  lines.push("Status: " + (meeting.status === "active" ? "Active" : "Finalized (" + meeting.finalizedDate + ")"));
+  lines.push("Started: " + meeting.createdDate);
+  lines.push("");
+  lines.push("NOTES");
+  lines.push("-".repeat(40));
+  lines.push(meeting.notes || "(none)");
+  lines.push("");
+  lines.push("QUOTES IN THIS MEETING (" + meetingQuotes.length + ")");
+  lines.push("-".repeat(40));
+  if (meetingQuotes.length === 0) {
+    lines.push("(none)");
+  } else {
+    meetingQuotes.forEach(function(q, i) {
+      const priceLine = (q.prices && q.prices[0]) ? fmt(q.prices[0].msrp) + " MSRP (50\"W x 84\"L)" : "No pricing yet";
+      lines.push((i + 1) + ". " + (q.item || "(no item #)") + " \u2014 " + (q.vendor || "(no vendor)"));
+      lines.push("   " + priceLine);
+    });
+  }
+  lines.push("");
+  lines.push("CUSTOMER QUOTE ITEMS FROM THIS MEETING (" + meetingCartItems.length + ")");
+  lines.push("-".repeat(40));
+  if (meetingCartItems.length === 0) {
+    lines.push("(none)");
+  } else {
+    meetingCartItems.forEach(function(c, i) {
+      lines.push((i + 1) + ". " + c.item + " \u2014 " + c.sizeLabel + " \u2014 Qty " + c.qty + " \u00d7 " + fmt(c.sellPrice) + " = " + fmt(c.sellPrice * c.qty));
+    });
+  }
+  lines.push("");
+  lines.push("PHOTOS: " + photoCount + " photo" + (photoCount === 1 ? "" : "s") + " attached across the quotes above.");
+
+  const blob = new Blob([lines.join("\n")], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const safeName = meeting.name.replace(/[^a-z0-9\-_]/gi, "_");
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = safeName + "_summary.txt";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  showToast("Downloading meeting summary\u2026", "success");
+}
+
+// ---------------------------------------------------------------
+// Sourcing screens (mirrors the Meetings block above)
+// ---------------------------------------------------------------
+async function renderNewSourcingCategoryChips() {
+  const container = document.getElementById("new-sourcing-category-group");
+  const categories = await getMeetingCategories();
+  container.innerHTML = categories.map(function(cat) {
+    const isSelected = selectedNewSourcingCategories.indexOf(cat) !== -1;
+    return '<button type="button" class="chip' + (isSelected ? " selected" : "") + '" onclick="toggleNewSourcingCategory(this)">' + escapeHtml(cat) + '</button>';
+  }).join("");
+}
+
+function toggleNewSourcingCategory(btn) {
+  const cat = btn.textContent;
+  const idx = selectedNewSourcingCategories.indexOf(cat);
+  if (idx === -1) selectedNewSourcingCategories.push(cat);
+  else selectedNewSourcingCategories.splice(idx, 1);
+  btn.classList.toggle("selected");
+}
+
+function showAddSourcingCategoryInput() {
+  document.getElementById("new-sourcing-category-add-row").style.display = "block";
+  document.getElementById("new-sourcing-category-input").focus();
+}
+
+async function addNewSourcingCategory() {
+  const input = document.getElementById("new-sourcing-category-input");
+  const name = input.value.trim();
+  if (!name) {
+    showToast("Enter a category name.", "error");
+    return;
+  }
+  const categories = await getMeetingCategories();
+  if (categories.some(function(c) { return c.toLowerCase() === name.toLowerCase(); })) {
+    showToast("That category already exists.", "error");
+    return;
+  }
+  categories.push(name);
+  await saveMeetingCategoriesList(categories);
+  selectedNewSourcingCategories.push(name);
+  input.value = "";
+  document.getElementById("new-sourcing-category-add-row").style.display = "none";
+  await renderNewSourcingCategoryChips();
+  showToast("Category added.", "success");
+}
+
+let selectedNewSourcingType = "tradeshow";
+
+function setNewSourcingType(type) {
+  selectedNewSourcingType = type;
+  document.querySelectorAll("#new-sourcing-type-group .chip").forEach(function(btn) {
+    btn.classList.toggle("selected", btn.getAttribute("data-type") === type);
+  });
+  document.getElementById("new-sourcing-event-field").style.display = (type === "factory") ? "none" : "block";
+  document.getElementById("new-sourcing-supplier-field").style.display = (type === "factory") ? "block" : "none";
+
+  if (type === "market") {
+    document.getElementById("new-sourcing-event-label").textContent = "Market";
+    document.getElementById("new-sourcing-event").placeholder = "e.g. Keqiao Textile Market";
+  } else {
+    document.getElementById("new-sourcing-event-label").textContent = "Event / Trip";
+    document.getElementById("new-sourcing-event").placeholder = "e.g. Canton Fair 2026";
+  }
+}
+
+function showNewSourcingSupplierSuggestions() {
+  updateNewSourcingSupplierClearBtn();
+  const val = document.getElementById("new-sourcing-supplier").value.trim().toLowerCase();
+  const matches = cachedSuppliers.filter(function(s) {
+    return !val || s.name.toLowerCase().indexOf(val) !== -1;
+  }).sort(function(a, b) { return a.name.toLowerCase().localeCompare(b.name.toLowerCase()); });
+
+  const container = document.getElementById("new-sourcing-supplier-suggestions");
+
+  if (cachedSuppliers.length === 0) {
+    container.style.display = "none";
+    return;
+  }
+
+  if (matches.length === 0) {
+    container.innerHTML = '<div class="suggestion-empty">No matching suppliers \u2014 you can still type a new one.</div>';
+  } else {
+    container.innerHTML = matches.slice(0, 8).map(function(s) {
+      const thumb = s.photo
+        ? '<img class="suggestion-thumb" src="' + s.photo + '" alt="">'
+        : '<span class="suggestion-thumb-empty">&#127970;</span>';
+      const meta = s.category ? '<div class="suggestion-meta">' + escapeHtml(s.category) + '</div>' : '';
+      return '<div class="suggestion-item" onmousedown="event.preventDefault(); selectNewSourcingSupplierSuggestion(\'' + attrSafe(s.name) + '\')">' +
+        thumb + '<div><div class="suggestion-name">' + escapeHtml(s.name) + '</div>' + meta + '</div></div>';
+    }).join("");
+  }
+  container.style.display = "block";
+}
+
+function hideNewSourcingSupplierSuggestionsDelayed() {
+  setTimeout(function() {
+    const el = document.getElementById("new-sourcing-supplier-suggestions");
+    if (el) el.style.display = "none";
+  }, 150);
+}
+
+function selectNewSourcingSupplierSuggestion(name) {
+  document.getElementById("new-sourcing-supplier").value = name;
+  document.getElementById("new-sourcing-supplier-suggestions").style.display = "none";
+  updateNewSourcingSupplierClearBtn();
+}
+
+function updateNewSourcingSupplierClearBtn() {
+  const input = document.getElementById("new-sourcing-supplier");
+  const btn = document.getElementById("new-sourcing-supplier-clear-btn");
+  btn.style.display = input.value ? "flex" : "none";
+}
+
+function clearNewSourcingSupplierField() {
+  document.getElementById("new-sourcing-supplier").value = "";
+  updateNewSourcingSupplierClearBtn();
+  document.getElementById("new-sourcing-supplier-suggestions").style.display = "none";
+}
+
+function openNewSourcingForm() {
+  document.getElementById("hamburger-drawer").classList.remove("show");
+  document.getElementById("hamburger-backdrop").classList.remove("show");
+  const activeScreen = document.querySelector(".screen.active");
+  if (activeScreen) screenBeforeSourcing = activeScreen.id.replace("screen-", "");
+
+  document.getElementById("new-sourcing-name").value = "";
+  document.getElementById("new-sourcing-event").value = "";
+  document.getElementById("new-sourcing-supplier").value = "";
+  updateNewSourcingSupplierClearBtn();
+  document.getElementById("new-sourcing-notes").value = "";
+  selectedNewSourcingCategories = [];
+  document.getElementById("new-sourcing-category-add-row").style.display = "none";
+  document.getElementById("new-sourcing-category-input").value = "";
+  setNewSourcingType("tradeshow");
+
+  document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
+  document.getElementById("screen-new-sourcing").classList.add("active");
+  document.getElementById("tabbar").style.display = "none";
+  renderNewSourcingCategoryChips();
+}
+
+function closeNewSourcingForm() {
+  document.getElementById("tabbar").style.display = "flex";
+  showScreen(screenBeforeSourcing);
+}
+
+async function startNewSourcing() {
+  const name = document.getElementById("new-sourcing-name").value.trim();
+  if (!name) {
+    showToast("Enter a name for this sourcing session.", "error");
+    return;
+  }
+  const eventValue = selectedNewSourcingType === "factory"
+    ? document.getElementById("new-sourcing-supplier").value.trim()
+    : document.getElementById("new-sourcing-event").value.trim();
+
+  const sourcing = {
+    id: "src_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+    name: name,
+    sourcingType: selectedNewSourcingType,
+    event: eventValue,
+    categories: selectedNewSourcingCategories.slice(),
+    notes: document.getElementById("new-sourcing-notes").value || "",
+    status: "active",
+    createdDate: new Date().toLocaleDateString(),
+    finalizedDate: null
+  };
+  const list = await getSourcingList();
+  list.push(sourcing);
+  await saveSourcingList(list);
+  await setActiveSourcingId(sourcing.id);
+
+  // For a factory visit, make sure the selected/typed supplier actually
+  // exists as a real supplier record too, and tag it to this session.
+  if (selectedNewSourcingType === "factory" && eventValue) {
+    const result = await upsertSupplier(eventValue, { source: "manual" });
+    if (result) {
+      await tagSupplierToSourcing(result.id, sourcing.id);
+    }
+  }
+
+  showToast("Sourcing started.", "success");
+
+  document.getElementById("tabbar").style.display = "none";
+  openSourcingDetail(sourcing.id, screenBeforeSourcing);
+}
+
+function openSourcingHome() {
+  document.getElementById("hamburger-drawer").classList.remove("show");
+  document.getElementById("hamburger-backdrop").classList.remove("show");
+  const activeScreen = document.querySelector(".screen.active");
+  if (activeScreen) screenBeforeSourcing = activeScreen.id.replace("screen-", "");
+
+  document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
+  document.getElementById("screen-sourcing-home").classList.add("active");
+  document.getElementById("tabbar").style.display = "none";
+  renderSourcingHome();
+}
+
+function closeSourcingHome() {
+  document.getElementById("tabbar").style.display = "flex";
+  showScreen(screenBeforeSourcing);
+}
+
+function sourcingEventLabel(s) {
+  if (!s.event) return "No event/trip/supplier set";
+  const typeLabel = s.sourcingType === "factory" ? "Factory Visit" : (s.sourcingType === "market" ? "Market" : "Trade Show");
+  return typeLabel + ": " + s.event;
+}
+
+async function renderSourcingHome() {
+  const container = document.getElementById("sourcing-home-list");
+  const list = await getSourcingList();
+  if (list.length === 0) {
+    container.innerHTML = '<div class="log-empty"><div class="icon">&#128269;</div>No sourcing sessions yet.<br>Start one from the hamburger menu.</div>';
+    return;
+  }
+  const sorted = list.slice().sort(function(a, b) {
+    if (a.status !== b.status) return a.status === "active" ? -1 : 1;
+    return b.createdDate.localeCompare(a.createdDate);
+  });
+  container.innerHTML = sorted.map(function(s) {
+    const catLabel = (s.categories || []).join(" + ") || "No category set";
+    return '<div class="meeting-row" onclick="openSourcingDetail(\'' + s.id + '\', \'sourcing-home\')">' +
+      '<div class="meeting-row-info">' +
+        '<div class="meeting-row-name">' + escapeHtml(s.name) + '</div>' +
+        '<div class="meeting-row-sub">' + escapeHtml(sourcingEventLabel(s)) + ' &middot; ' + escapeHtml(catLabel) + ' &middot; ' + escapeHtml(s.createdDate) + '</div>' +
+      '</div>' +
+      '<span class="meeting-status-badge ' + s.status + '">' + (s.status === "active" ? "Active" : "Finalized") + '</span>' +
+    '</div>';
+  }).join("");
+}
+
+let screenBeforeSourcingDetail = "calc";
+
+function openSourcingDetail(sourcingId, cameFrom) {
+  document.getElementById("hamburger-drawer").classList.remove("show");
+  document.getElementById("hamburger-backdrop").classList.remove("show");
+  if (cameFrom) {
+    screenBeforeSourcingDetail = cameFrom;
+  } else {
+    const activeScreen = document.querySelector(".screen.active");
+    if (activeScreen) screenBeforeSourcingDetail = activeScreen.id.replace("screen-", "");
+  }
+
+  document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
+  document.getElementById("screen-sourcing-detail").classList.add("active");
+  document.getElementById("tabbar").style.display = "none";
+  renderSourcingDetail(sourcingId);
+}
+
+function closeSourcingDetail() {
+  if (screenBeforeSourcingDetail === "sourcing-home") {
+    document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
+    document.getElementById("screen-sourcing-home").classList.add("active");
+    renderSourcingHome();
+    return;
+  }
+  document.getElementById("tabbar").style.display = "flex";
+  showScreen(screenBeforeSourcingDetail);
+}
+
+let currentSourcingDetailId = null;
+
+async function renderSourcingDetail(sourcingId) {
+  currentSourcingDetailId = sourcingId;
+  const list = await getSourcingList();
+  const sourcing = list.find(function(s) { return s.id === sourcingId; });
+  if (!sourcing) {
+    showToast("Could not find that sourcing session.", "error");
+    closeSourcingDetail();
+    return;
+  }
+
+  document.getElementById("sourcing-detail-title").textContent = sourcing.name;
+  const catLabel = (sourcing.categories || []).join(" + ") || "No category set";
+  document.getElementById("sourcing-detail-meta").innerHTML =
+    '<div class="field-hint" style="margin-bottom:14px;">' +
+      escapeHtml(sourcingEventLabel(sourcing)) + ' &middot; ' + escapeHtml(catLabel) + ' &middot; Started ' + escapeHtml(sourcing.createdDate) +
+      (sourcing.status === "finalized" ? ' &middot; Finalized ' + escapeHtml(sourcing.finalizedDate || "") : "") +
+    '</div>';
+  document.getElementById("sourcing-detail-notes").value = sourcing.notes || "";
+
+  const finalizeBtn = document.getElementById("sourcing-finalize-btn");
+  finalizeBtn.textContent = sourcing.status === "active" ? "Finalize sourcing" : "Reopen sourcing";
+
+  const rawQuotes = await storageGet("nextex_quotes");
+  let quotes = [];
+  try { quotes = rawQuotes ? JSON.parse(rawQuotes) : []; } catch (e) { quotes = []; }
+  const sourcingQuotes = quotes.filter(function(q) { return q.sourcingId === sourcingId; });
+
+  const quotesContainer = document.getElementById("sourcing-detail-quotes");
+  if (sourcingQuotes.length === 0) {
+    quotesContainer.innerHTML = '<div class="log-empty"><div class="icon">&#128203;</div>No quotes saved to this sourcing yet.</div>';
+  } else {
+    quotesContainer.innerHTML = sourcingQuotes.map(function(q) {
+      const headline = (q.prices && q.prices[0]) ? fmt(q.prices[0].msrp) + " MSRP" : "No pricing yet";
+      return '<div class="meeting-row">' +
+        '<div class="meeting-row-info">' +
+          '<div class="meeting-row-name">' + escapeHtml(q.item || "(no item #)") + '</div>' +
+          '<div class="meeting-row-sub">' + escapeHtml(q.vendor || "") + ' &middot; ' + escapeHtml(headline) + '</div>' +
+        '</div>' +
+      '</div>';
+    }).join("");
+  }
+
+  const rawSuppliers = await storageGet("nextex_suppliers");
+  let suppliers = [];
+  try { suppliers = rawSuppliers ? JSON.parse(rawSuppliers) : []; } catch (e) { suppliers = []; }
+  const sourcingSuppliers = suppliers.filter(function(s) { return s.sourcingId === sourcingId; });
+
+  const suppliersContainer = document.getElementById("sourcing-detail-suppliers");
+  if (sourcingSuppliers.length === 0) {
+    suppliersContainer.innerHTML = '<div class="log-empty"><div class="icon">&#127970;</div>No new suppliers added during this sourcing yet.</div>';
+  } else {
+    suppliersContainer.innerHTML = sourcingSuppliers.map(function(s) {
+      return '<div class="meeting-row">' +
+        '<div class="meeting-row-info">' +
+          '<div class="meeting-row-name">' + escapeHtml(s.name) + '</div>' +
+        '</div>' +
+      '</div>';
+    }).join("");
+  }
+
+  const photosContainer = document.getElementById("sourcing-detail-photos");
+  const sourcingPhotos = sourcingQuotes.filter(function(q) { return q.photo; });
+  if (sourcingPhotos.length === 0) {
+    photosContainer.innerHTML = '<div class="log-empty"><div class="icon">&#128247;</div>No photos yet.</div>';
+  } else {
+    photosContainer.innerHTML = '<div class="photo-gallery-grid">' + sourcingPhotos.map(function(q) {
+      return '<div class="photo-gallery-tile"><img src="' + q.photo + '" alt=""></div>';
+    }).join("") + '</div>';
+  }
+}
+
+async function saveSourcingDetailNotes() {
+  if (!currentSourcingDetailId) return;
+  const list = await getSourcingList();
+  const sourcing = list.find(function(s) { return s.id === currentSourcingDetailId; });
+  if (!sourcing) return;
+  sourcing.notes = document.getElementById("sourcing-detail-notes").value;
+  await saveSourcingList(list);
+}
+
+async function toggleSourcingFinalized() {
+  if (!currentSourcingDetailId) return;
+  const list = await getSourcingList();
+  const sourcing = list.find(function(s) { return s.id === currentSourcingDetailId; });
+  if (!sourcing) return;
+
+  if (sourcing.status === "active") {
+    sourcing.status = "finalized";
+    sourcing.finalizedDate = new Date().toLocaleDateString();
+    if (activeSourcingId === sourcing.id) await setActiveSourcingId(null);
+    showToast("Sourcing finalized.", "success");
+  } else {
+    sourcing.status = "active";
+    sourcing.finalizedDate = null;
+    await setActiveSourcingId(sourcing.id);
+    showToast("Sourcing reopened \u2014 it's active again.", "success");
+  }
+  await saveSourcingList(list);
+  renderSourcingDetail(sourcing.id);
+}
+
+async function downloadSourcingSummary() {
+  if (!currentSourcingDetailId) return;
+  const list = await getSourcingList();
+  const sourcing = list.find(function(s) { return s.id === currentSourcingDetailId; });
+  if (!sourcing) return;
+
+  const rawQuotes = await storageGet("nextex_quotes");
+  let quotes = [];
+  try { quotes = rawQuotes ? JSON.parse(rawQuotes) : []; } catch (e) { quotes = []; }
+  const sourcingQuotes = quotes.filter(function(q) { return q.sourcingId === sourcing.id; });
+
+  const rawSuppliers = await storageGet("nextex_suppliers");
+  let suppliers = [];
+  try { suppliers = rawSuppliers ? JSON.parse(rawSuppliers) : []; } catch (e) { suppliers = []; }
+  const sourcingSuppliers = suppliers.filter(function(s) { return s.sourcingId === sourcing.id; });
+
+  const photoCount = sourcingQuotes.filter(function(q) { return q.photo; }).length;
+  const catLabel = (sourcing.categories || []).join(" + ") || "Not set";
+
+  let lines = [];
+  lines.push("SOURCING SUMMARY");
+  lines.push("=".repeat(40));
+  lines.push(sourcing.name);
+  lines.push(sourcingEventLabel(sourcing));
+  lines.push("Category: " + catLabel);
+  lines.push("Status: " + (sourcing.status === "active" ? "Active" : "Finalized (" + sourcing.finalizedDate + ")"));
+  lines.push("Started: " + sourcing.createdDate);
+  lines.push("");
+  lines.push("NOTES");
+  lines.push("-".repeat(40));
+  lines.push(sourcing.notes || "(none)");
+  lines.push("");
+  lines.push("QUOTES FROM THIS SOURCING (" + sourcingQuotes.length + ")");
+  lines.push("-".repeat(40));
+  if (sourcingQuotes.length === 0) {
+    lines.push("(none)");
+  } else {
+    sourcingQuotes.forEach(function(q, i) {
+      const priceLine = (q.prices && q.prices[0]) ? fmt(q.prices[0].msrp) + " MSRP (50\"W x 84\"L)" : "No pricing yet";
+      lines.push((i + 1) + ". " + (q.item || "(no item #)") + " \u2014 " + (q.vendor || "(no vendor)"));
+      lines.push("   " + priceLine);
+    });
+  }
+  lines.push("");
+  lines.push("NEW SUPPLIERS ADDED (" + sourcingSuppliers.length + ")");
+  lines.push("-".repeat(40));
+  if (sourcingSuppliers.length === 0) {
+    lines.push("(none)");
+  } else {
+    sourcingSuppliers.forEach(function(s, i) {
+      lines.push((i + 1) + ". " + s.name);
+    });
+  }
+  lines.push("");
+  lines.push("PHOTOS: " + photoCount + " photo" + (photoCount === 1 ? "" : "s") + " attached across the quotes above.");
+
+  const blob = new Blob([lines.join("\n")], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const safeName = sourcing.name.replace(/[^a-z0-9\-_]/gi, "_");
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = safeName + "_summary.txt";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  showToast("Downloading sourcing summary\u2026", "success");
+}
+
 let screenBeforeAlbumsHome = "calc";
 let galleryPhotos = [];
 let galleryLightboxIndex = 0;
@@ -2743,6 +3967,13 @@ function closePhotoGallery() {
   showScreen(screenBeforeGallery);
 }
 
+function clearGalleryFilters() {
+  document.getElementById("gallery-filter-customer").value = "";
+  document.getElementById("gallery-filter-supplier").value = "";
+  document.getElementById("gallery-filter-category").value = "";
+  renderPhotoGallery();
+}
+
 async function renderPhotoGallery() {
   const grid = document.getElementById("photo-gallery-grid");
   const hintEl = document.querySelector("#screen-gallery .field-hint");
@@ -2814,10 +4045,13 @@ async function renderPhotoGallery() {
   const filterRow = document.getElementById("gallery-filter-row");
   if (filterRow) filterRow.style.display = currentGalleryAlbumFilter ? "none" : "flex";
 
+  const clearFiltersBtn = document.getElementById("gallery-clear-filters-btn");
   if (!currentGalleryAlbumFilter) {
     const customerFilter = document.getElementById("gallery-filter-customer").value;
     const supplierFilter = document.getElementById("gallery-filter-supplier").value;
     const categoryFilter = document.getElementById("gallery-filter-category").value;
+
+    if (clearFiltersBtn) clearFiltersBtn.style.display = (customerFilter || supplierFilter || categoryFilter) ? "inline-flex" : "none";
 
     if (customerFilter) galleryPhotos = galleryPhotos.filter(function(p) { return p.customer === customerFilter; });
     if (supplierFilter) {
@@ -2828,6 +4062,8 @@ async function renderPhotoGallery() {
       });
     }
     if (categoryFilter) galleryPhotos = galleryPhotos.filter(function(p) { return p.category === categoryFilter; });
+  } else if (clearFiltersBtn) {
+    clearFiltersBtn.style.display = "none";
   }
 
   if (currentGalleryAlbumFilter) {
@@ -2837,6 +4073,9 @@ async function renderPhotoGallery() {
   } else if (hintEl) {
     hintEl.textContent = "Every photo you've taken across Saved Quotes and Suppliers, in one place.";
   }
+
+  const downloadAllBtn = document.getElementById("gallery-download-all-btn");
+  if (downloadAllBtn) downloadAllBtn.style.display = (currentGalleryAlbumFilter && galleryPhotos.length > 0) ? "block" : "none";
 
   // Quick-access chips to jump into an album, only shown on the unfiltered view.
   const albumRow = document.getElementById("gallery-album-row");
@@ -2940,6 +4179,41 @@ async function addSelectedToAlbum() {
 
   showToast(indices.length + (indices.length === 1 ? " photo" : " photos") + " added to album.", "success");
   cancelGallerySelectMode();
+}
+
+async function downloadAlbumPhotos() {
+  if (galleryPhotos.length === 0) {
+    showToast("No photos to download.", "error");
+    return;
+  }
+  showToast("Downloading " + galleryPhotos.length + (galleryPhotos.length === 1 ? " photo\u2026" : " photos\u2026"), "success");
+  for (let i = 0; i < galleryPhotos.length; i++) {
+    const p = galleryPhotos[i];
+    if (!p.photo) continue;
+    const safeName = (p.item || "photo").replace(/[^a-z0-9\-_]/gi, "_");
+    const ext = p.photo.indexOf("image/png") !== -1 ? "png" : "jpg";
+    const link = document.createElement("a");
+    link.href = p.photo;
+    link.download = safeName + "_" + (i + 1) + "." + ext;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    await new Promise(function(resolve) { setTimeout(resolve, 350); });
+  }
+}
+
+function downloadGalleryPhoto() {
+  const p = galleryPhotos[galleryLightboxIndex];
+  if (!p || !p.photo) return;
+  const safeName = (p.item || "photo").replace(/[^a-z0-9\-_]/gi, "_");
+  const ext = p.photo.indexOf("image/png") !== -1 ? "png" : "jpg";
+  const link = document.createElement("a");
+  link.href = p.photo;
+  link.download = safeName + "." + ext;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  showToast("Downloading photo\u2026", "success");
 }
 
 function openGalleryLightbox(index) {
@@ -3288,13 +4562,22 @@ async function handleSupplierCardScanned(event) {
     const parsed = parseCardText(text);
     const guess = parsed.company;
     if (guess) {
-      await upsertSupplier(guess, {
+      const result = await upsertSupplier(guess, {
         source: "scan", photo: dataUrl, rawText: text,
         contactName: parsed.contactName, email: parsed.email, phone: parsed.phone, address: parsed.address
       });
       statusEl.textContent = "Added \u201c" + guess + "\u201d from card scan.";
       showToast("Supplier added from card scan.", "success");
       renderSupplierList();
+
+      if (result && result.isNew) {
+        const activeSourcingForTag = await getActiveSourcing();
+        if (activeSourcingForTag) {
+          showConfirm("Also add this to \u201c" + activeSourcingForTag.name + "\u201d?", async function() {
+            await tagSupplierToSourcing(result.id, activeSourcingForTag.id);
+          });
+        }
+      }
     } else {
       statusEl.textContent = "Could not confidently read a name \u2014 add the supplier manually above.";
       showToast("Scan complete, but no clear name found.", "error");
@@ -3375,17 +4658,21 @@ async function saveQuote() {
   }
 
   let ok;
+  let savedQuoteId;
   if (editingQuoteId) {
     const idx = list.findIndex(function(e) { return e.id === editingQuoteId; });
     if (idx === -1) {
       showToast("Could not find that quote to update \u2014 saving as new instead.", "error");
-      list.unshift(Object.assign({ id: "q_" + Date.now(), date: new Date().toLocaleDateString() }, fieldsFromForm));
+      savedQuoteId = "q_" + Date.now();
+      list.unshift(Object.assign({ id: savedQuoteId, date: new Date().toLocaleDateString() }, fieldsFromForm));
     } else {
+      savedQuoteId = editingQuoteId;
       list[idx] = Object.assign({}, list[idx], fieldsFromForm);
     }
     ok = await storageSet("nextex_quotes", JSON.stringify(list));
   } else {
-    list.unshift(Object.assign({ id: "q_" + Date.now(), date: new Date().toLocaleDateString() }, fieldsFromForm));
+    savedQuoteId = "q_" + Date.now();
+    list.unshift(Object.assign({ id: savedQuoteId, date: new Date().toLocaleDateString() }, fieldsFromForm));
     ok = await storageSet("nextex_quotes", JSON.stringify(list));
   }
 
@@ -3397,9 +4684,49 @@ async function saveQuote() {
     exitEditMode();
     renderLog();
     showScreen("log");
+
+    const activeMeetingForTag = await getActiveMeeting();
+    const activeSourcingForTag = await getActiveSourcing();
+    function maybePromptSourcingTag() {
+      if (activeSourcingForTag) {
+        showConfirm("Also add this to \u201c" + activeSourcingForTag.name + "\u201d?", async function() {
+          await tagQuoteToSourcing(savedQuoteId, activeSourcingForTag.id);
+        });
+      }
+    }
+    if (activeMeetingForTag) {
+      showConfirm("Also add this to \u201c" + activeMeetingForTag.name + "\u201d?", async function() {
+        await tagQuoteToMeeting(savedQuoteId, activeMeetingForTag.id);
+        maybePromptSourcingTag();
+      }, maybePromptSourcingTag);
+    } else {
+      maybePromptSourcingTag();
+    }
   } else {
     showToast("Could not save the quote. Please try again.", "error");
   }
+}
+
+async function tagQuoteToMeeting(quoteId, meetingId) {
+  const raw = await storageGet("nextex_quotes");
+  let list = [];
+  try { list = raw ? JSON.parse(raw) : []; } catch (e) { list = []; }
+  const entry = list.find(function(e) { return e.id === quoteId; });
+  if (!entry) return;
+  entry.meetingId = meetingId;
+  await storageSet("nextex_quotes", JSON.stringify(list));
+  showToast("Added to meeting.", "success");
+}
+
+async function tagQuoteToSourcing(quoteId, sourcingId) {
+  const raw = await storageGet("nextex_quotes");
+  let list = [];
+  try { list = raw ? JSON.parse(raw) : []; } catch (e) { list = []; }
+  const entry = list.find(function(e) { return e.id === quoteId; });
+  if (!entry) return;
+  entry.sourcingId = sourcingId;
+  await storageSet("nextex_quotes", JSON.stringify(list));
+  showToast("Added to sourcing.", "success");
 }
 
 function clearPriceWidth() {
@@ -3696,8 +5023,9 @@ async function processQuoteSelections(btn) {
 }
 
 async function addCalculatorItemToCart(item, vendor, category, sizeLabel, pair, sellPrice) {
+  const cartKey = "calc_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
   customerCart.push({
-    key: "calc_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+    key: cartKey,
     item: item || "(no item #)",
     vendor: (vendor && vendor !== "(no vendor)") ? vendor : "",
     category: category === "cushions" ? "Cushion" : "Curtain",
@@ -3707,6 +5035,40 @@ async function addCalculatorItemToCart(item, vendor, category, sizeLabel, pair, 
   });
   await saveCart();
   showToast("Added to customer quote.", "success");
+
+  const activeMeetingForTag = await getActiveMeeting();
+  const activeSourcingForTag = await getActiveSourcing();
+  function maybePromptCartSourcingTag() {
+    if (activeSourcingForTag) {
+      showConfirm("Also add this to \u201c" + activeSourcingForTag.name + "\u201d?", async function() {
+        await tagCartItemToSourcing(cartKey, activeSourcingForTag.id);
+      });
+    }
+  }
+  if (activeMeetingForTag) {
+    showConfirm("Also add this to \u201c" + activeMeetingForTag.name + "\u201d?", async function() {
+      await tagCartItemToMeeting(cartKey, activeMeetingForTag.id);
+      maybePromptCartSourcingTag();
+    }, maybePromptCartSourcingTag);
+  } else {
+    maybePromptCartSourcingTag();
+  }
+}
+
+async function tagCartItemToMeeting(cartKey, meetingId) {
+  const item = customerCart.find(function(c) { return c.key === cartKey; });
+  if (!item) return;
+  item.meetingId = meetingId;
+  await saveCart();
+  showToast("Added to meeting.", "success");
+}
+
+async function tagCartItemToSourcing(cartKey, sourcingId) {
+  const item = customerCart.find(function(c) { return c.key === cartKey; });
+  if (!item) return;
+  item.sourcingId = sourcingId;
+  await saveCart();
+  showToast("Added to sourcing.", "success");
 }
 
 async function removeCartItem(key) {
@@ -4676,7 +6038,7 @@ function selectVendorSuggestion(name) {
 
 async function upsertSupplier(name, opts) {
   const trimmed = (name || "").trim();
-  if (!trimmed || trimmed === "(no vendor)") return;
+  if (!trimmed || trimmed === "(no vendor)") return null;
   opts = opts || {};
 
   const raw = await storageGet("nextex_suppliers");
@@ -4684,10 +6046,14 @@ async function upsertSupplier(name, opts) {
   try { list = raw ? JSON.parse(raw) : []; } catch (e) { list = []; }
 
   const idx = list.findIndex(function(s) { return s.name.toLowerCase() === trimmed.toLowerCase(); });
+  let isNew = false;
+  let resultId;
 
   if (idx === -1) {
+    isNew = true;
+    resultId = "s_" + Date.now();
     list.push({
-      id: "s_" + Date.now(),
+      id: resultId,
       name: trimmed,
       source: opts.source || "manual",
       photo: opts.photo || "",
@@ -4701,6 +6067,7 @@ async function upsertSupplier(name, opts) {
       dateAdded: new Date().toLocaleDateString()
     });
   } else {
+    resultId = list[idx].id;
     const existing = list[idx];
     if (opts.source === "scan" && opts.photo) {
       existing.source = "scan";
@@ -4715,6 +6082,7 @@ async function upsertSupplier(name, opts) {
 
   await storageSet("nextex_suppliers", JSON.stringify(list));
   await refreshSupplierCache();
+  return { id: resultId, isNew: isNew };
 }
 
 async function updateSupplierField(id, field, value) {
@@ -4740,10 +6108,31 @@ async function addManualSupplier() {
     showToast("Enter a supplier name first.", "error");
     return;
   }
-  await upsertSupplier(name, { source: "manual" });
+  const result = await upsertSupplier(name, { source: "manual" });
   input.value = "";
   showToast("Supplier added.", "success");
   renderSupplierList();
+
+  if (result && result.isNew) {
+    const activeSourcingForTag = await getActiveSourcing();
+    if (activeSourcingForTag) {
+      showConfirm("Also add this to \u201c" + activeSourcingForTag.name + "\u201d?", async function() {
+        await tagSupplierToSourcing(result.id, activeSourcingForTag.id);
+      });
+    }
+  }
+}
+
+async function tagSupplierToSourcing(supplierId, sourcingId) {
+  const raw = await storageGet("nextex_suppliers");
+  let list = [];
+  try { list = raw ? JSON.parse(raw) : []; } catch (e) { list = []; }
+  const entry = list.find(function(s) { return s.id === supplierId; });
+  if (!entry) return;
+  entry.sourcingId = sourcingId;
+  await storageSet("nextex_suppliers", JSON.stringify(list));
+  await refreshSupplierCache();
+  showToast("Added to sourcing.", "success");
 }
 
 async function deleteSupplier(id) {
@@ -4907,6 +6296,8 @@ function showScreen(name) {
   updateCushionFreightReference();
   await refreshSupplierCache();
   await loadCart();
+  await loadActiveMeetingId();
+  await loadActiveSourcingId();
   await loadCqMeta();
   updateCartBadge();
   renderPriceCards();
