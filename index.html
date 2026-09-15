@@ -1992,6 +1992,22 @@
         <span class="section-label" style="margin:0;">Albums</span>
       </div>
       <div class="field-hint" style="margin-bottom:14px;">Group photos from a trade show, a supplier, or however you like &mdash; a photo can be in more than one album.</div>
+
+      <button type="button" class="btn btn-save" style="margin-bottom:14px;" onclick="startCreateAlbumFlow()">+ Create Album</button>
+
+      <div id="create-album-panel" style="display:none; margin-bottom:16px;">
+        <div class="field">
+          <label for="create-album-name">Album name</label>
+          <input type="text" id="create-album-name" placeholder="e.g. Canton Fair Rugs">
+        </div>
+        <div class="field-row" style="gap:8px;">
+          <button type="button" class="scan-btn" style="flex:1;" onclick="createAlbumFromUpload()">Upload photos</button>
+          <button type="button" class="scan-btn" style="flex:1;" onclick="createAlbumFromExisting()">Select existing photos</button>
+        </div>
+        <input type="file" id="create-album-upload-input" accept="image/*" multiple style="display:none;" onchange="handleCreateAlbumUpload(event)">
+        <button type="button" class="cq-back-btn" style="margin-top:8px; width:100%;" onclick="cancelCreateAlbumFlow()">Cancel</button>
+      </div>
+
       <div id="albums-grid"></div>
     </div>
   </div>
@@ -4200,6 +4216,75 @@ async function createAlbum(name) {
   return album;
 }
 
+function startCreateAlbumFlow() {
+  document.getElementById("create-album-panel").style.display = "block";
+  document.getElementById("create-album-name").value = "";
+  document.getElementById("create-album-name").focus();
+}
+
+function cancelCreateAlbumFlow() {
+  document.getElementById("create-album-panel").style.display = "none";
+}
+
+function createAlbumFromUpload() {
+  const name = document.getElementById("create-album-name").value.trim();
+  if (!name) {
+    showToast("Enter an album name first.", "error");
+    return;
+  }
+  document.getElementById("create-album-upload-input").click();
+}
+
+async function handleCreateAlbumUpload(event) {
+  const files = event.target.files ? Array.from(event.target.files) : [];
+  event.target.value = "";
+  if (files.length === 0) return;
+  const name = document.getElementById("create-album-name").value.trim();
+  if (!name) return;
+
+  const album = await createAlbum(name);
+  const list = await getSessionPhotos();
+  let addedCount = 0;
+  for (let i = 0; i < files.length; i++) {
+    try {
+      const photoDataUrl = await compressImageFile(files[i], 480, 0.72);
+      list.push({
+        id: "sphoto_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+        photo: photoDataUrl,
+        meetingId: null,
+        sourcingId: null,
+        albumIds: [album.id],
+        timestamp: new Date().toISOString()
+      });
+      addedCount++;
+    } catch (e) {
+      // skip a file that fails to process, keep going with the rest
+    }
+  }
+  await saveSessionPhotos(list);
+  showToast('Album "' + name + '" created with ' + addedCount + (addedCount === 1 ? " photo" : " photos") + ".", "success");
+  cancelCreateAlbumFlow();
+  openAlbum(album.id);
+}
+
+async function createAlbumFromExisting() {
+  const name = document.getElementById("create-album-name").value.trim();
+  if (!name) {
+    showToast("Enter an album name first.", "error");
+    return;
+  }
+  const album = await createAlbum(name);
+  cancelCreateAlbumFlow();
+
+  document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
+  document.getElementById("screen-gallery").classList.add("active");
+  currentGalleryAlbumFilter = null; // browse everything, not filtered to the still-empty new album
+  await renderPhotoGallery();
+  await toggleGallerySelectMode();
+  document.getElementById("gallery-album-picker").value = album.id;
+  showToast('Now pick photos to add to "' + name + '".', "success");
+}
+
 async function addPhotoRefToAlbum(sourceType, sourceId, albumId) {
   const storageKey = sourceType === "quote" ? "nextex_quotes" : (sourceType === "session" ? "nextex_session_photos" : "nextex_suppliers");
   const raw = await storageGet(storageKey);
@@ -4272,7 +4357,7 @@ async function renderAlbumsHome() {
   const albums = await getAlbums();
 
   if (albums.length === 0) {
-    grid.innerHTML = '<div class="log-empty"><div class="icon">&#128193;</div>No albums yet.<br>Select photos in the Photo Gallery and add them to a new album.</div>';
+    grid.innerHTML = '<div class="log-empty"><div class="icon">&#128193;</div>No albums yet.<br>Tap "+ Create Album" above to get started.</div>';
     return;
   }
 
