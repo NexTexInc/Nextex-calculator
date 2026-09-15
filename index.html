@@ -877,6 +877,35 @@
   .toast.error { background: var(--rust); }
   .toast.success { background: var(--green); }
 
+  .qr-code-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,17,44,0.78);
+    z-index: 999;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .qr-code-overlay.show { display: flex; }
+  .qr-code-card {
+    background: white;
+    border-radius: 16px;
+    padding: 24px;
+    max-width: 300px;
+    width: 100%;
+    text-align: center;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  }
+  .qr-code-label {
+    font-family: "Century Gothic", "Apple Gothic", AppleGothic, sans-serif;
+    font-weight: 700;
+    font-size: 16px;
+    color: var(--navy);
+    margin-bottom: 14px;
+  }
+  .qr-code-card canvas { max-width: 100%; height: auto !important; }
+
   .confirm-banner {
     position: fixed;
     left: 50%;
@@ -1319,6 +1348,24 @@
       <button type="button" class="hamburger-submenu-item" onclick="openSourcingHome()">All Sourcing &#8594;</button>
       <div id="hamburger-active-sourcing-item"></div>
     </div>
+
+    <button type="button" class="hamburger-menu-item" onclick="toggleHamburgerSubmenu('projects')">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"></path></svg>
+      <span style="flex:1;">Projects</span>
+      <span class="hamburger-chevron" id="hamburger-chevron-projects">&#9662;</span>
+    </button>
+    <div class="hamburger-submenu" id="hamburger-submenu-projects" style="display:none;">
+      <div class="hamburger-submenu-item" style="cursor:default; color:var(--text-secondary); font-weight:600;">Coming soon</div>
+    </div>
+
+    <button type="button" class="hamburger-menu-item" onclick="toggleHamburgerSubmenu('database')">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"></ellipse><path d="M4 5v14c0 1.66 3.58 3 8 3s8-1.34 8-3V5"></path><path d="M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3"></path></svg>
+      <span style="flex:1;">Database</span>
+      <span class="hamburger-chevron" id="hamburger-chevron-database">&#9662;</span>
+    </button>
+    <div class="hamburger-submenu" id="hamburger-submenu-database" style="display:none;">
+      <button type="button" class="hamburger-submenu-item" onclick="openDatabaseHome()">All Items &#8594;</button>
+    </div>
   </div>
 
   <div class="header">
@@ -1379,6 +1426,17 @@
     <div class="confirm-actions">
       <button class="btn btn-clear-all" id="add-album-confirm-btn" style="flex:none; padding:8px 18px;" onclick="confirmAddToAlbum()">Add</button>
       <button class="btn" id="add-album-cancel-btn" style="flex:none; padding:8px 18px; background:var(--border); color:var(--text-primary);" onclick="cancelAddToAlbum()">Cancel</button>
+    </div>
+  </div>
+
+  <div id="qr-code-overlay" class="qr-code-overlay" onclick="closeQRCodeModal()">
+    <div class="qr-code-card" onclick="event.stopPropagation();">
+      <div id="qr-code-item-label" class="qr-code-label"></div>
+      <canvas id="qr-code-canvas"></canvas>
+      <div class="field-row" style="gap:8px; margin-top:16px;">
+        <button type="button" class="btn btn-save" style="flex:1;" onclick="downloadQRCode()">Download</button>
+        <button type="button" class="btn btn-clear-partial" style="flex:1;" onclick="closeQRCodeModal()">Close</button>
+      </div>
     </div>
   </div>
 
@@ -2316,6 +2374,139 @@
         </select>
       </div>
       <div id="photo-picker-grid"></div>
+    </div>
+  </div>
+
+  <!-- ITEM CREATION SCREEN -->
+  <div class="screen" id="screen-item-creation">
+    <div class="content">
+      <div class="cq-back-header">
+        <button type="button" class="cq-back-btn" onclick="closeItemCreation()">&#8592; Back</button>
+        <span class="section-label" style="margin:0;">Create Item</span>
+      </div>
+
+      <div class="field">
+        <label>Design</label>
+        <div class="chip-group" id="item-design-choice-group">
+          <button type="button" class="chip selected" data-choice="new" onclick="setItemDesignChoice('new')">New Design</button>
+          <button type="button" class="chip" data-choice="existing" onclick="setItemDesignChoice('existing')">Existing Design</button>
+        </div>
+      </div>
+
+      <div class="field" id="item-existing-design-field" style="display:none;">
+        <label for="item-existing-design-select">Select design</label>
+        <select id="item-existing-design-select" onchange="handleExistingDesignChange()"></select>
+      </div>
+
+      <div class="field-row" style="gap:14px;">
+        <div class="field" style="flex:1;">
+          <label>Item #</label>
+          <div id="item-number-display" style="font-family:'Century Gothic'; font-weight:700; font-size:17px; color:var(--navy); padding:10px 0;"></div>
+        </div>
+        <div class="field" style="flex:1;">
+          <label>Design #</label>
+          <div id="item-design-number-display" style="font-family:'Century Gothic'; font-weight:700; font-size:17px; color:var(--navy); padding:10px 0;"></div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="item-brand">Brand</label>
+        <input type="text" id="item-brand" placeholder="Optional" oninput="updateItemDescriptionPreview()">
+      </div>
+      <div class="field">
+        <label for="item-design-name">Design Name</label>
+        <input type="text" id="item-design-name" placeholder="Optional" oninput="updateItemDescriptionPreview()">
+      </div>
+
+      <div class="field">
+        <label for="item-size">Size</label>
+        <select id="item-size" onchange="handleItemSizeChange()"></select>
+      </div>
+      <div class="field">
+        <label for="item-color">Color</label>
+        <input type="text" id="item-color" oninput="updateItemDescriptionPreview()">
+      </div>
+
+      <div id="item-cushion-fields" style="display:none;">
+        <div class="field">
+          <label for="item-backing">Backing</label>
+          <select id="item-backing" onchange="updateItemDescriptionPreview()">
+            <option value="BACK TO BACK">Back to Back</option>
+            <option value="VELVET OR LINEN">Velvet or Linen</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Piping</label>
+          <div class="chip-group" id="item-piping-group">
+            <button type="button" class="chip selected" data-val="NO" onclick="setItemPiping('NO')">No</button>
+            <button type="button" class="chip" data-val="YES" onclick="setItemPiping('YES')">Yes</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="item-closure-type">Closure Type</label>
+          <input type="text" id="item-closure-type" placeholder="e.g. Full Zip, 8&quot; Locking Zip">
+        </div>
+        <div class="field">
+          <label for="item-fill-type">Fill Type</label>
+          <input type="text" id="item-fill-type" placeholder="e.g. Down Alt, Feather, Std Poly">
+        </div>
+        <div class="field">
+          <label for="item-mill-ref">Mill / Supplier Reference #</label>
+          <input type="text" id="item-mill-ref" placeholder="Optional" oninput="updateItemDescriptionPreview()">
+        </div>
+      </div>
+
+      <div id="item-curtain-fields" style="display:none;">
+        <div class="field">
+          <label>Pack Type</label>
+          <div class="chip-group" id="item-pack-type-group">
+            <button type="button" class="chip selected" data-val="SINGLE" onclick="setItemPackType('SINGLE')">Single</button>
+            <button type="button" class="chip" data-val="2PK" onclick="setItemPackType('2PK')">2 Pack</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="item-coating">Coating</label>
+          <input type="text" id="item-coating" placeholder="e.g. Blackout, Room Darkening">
+        </div>
+        <div class="field">
+          <label for="item-mount-type">Mount Type</label>
+          <input type="text" id="item-mount-type" placeholder="Grommet, Rod Pocket, Tab Back...">
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Official Item Description (auto-generated)</label>
+        <div id="item-description-preview" class="ref-box"></div>
+      </div>
+
+      <button type="button" class="btn btn-save" onclick="saveItem()">Save Item</button>
+    </div>
+  </div>
+
+  <!-- DATABASE HOME SCREEN -->
+  <div class="screen" id="screen-database-home">
+    <div class="content">
+      <div class="cq-back-header">
+        <button type="button" class="cq-back-btn" onclick="closeDatabaseHome()">&#8592; Back</button>
+        <span class="section-label" style="margin:0;">Item Database</span>
+      </div>
+      <div class="field-hint" style="margin-bottom:10px;">Every official item created from a confirmed quote.</div>
+
+      <div class="field">
+        <label for="database-next-item-number">Next Item #</label>
+        <div class="field-row" style="gap:8px;">
+          <input type="text" id="database-next-item-number" placeholder="e.g. 951TEX" style="flex:1;">
+          <button type="button" class="scan-btn" onclick="saveNextItemNumberSeed()">Set</button>
+        </div>
+        <div class="field-hint">Set this once to match your real numbering history.</div>
+      </div>
+
+      <div class="field">
+        <label for="database-search">Search by Item #</label>
+        <input type="text" id="database-search" placeholder="Type to search..." oninput="renderDatabaseHome()">
+      </div>
+
+      <div id="database-items-list"></div>
     </div>
   </div>
 
@@ -3799,6 +3990,326 @@ function clearPendingSupplierPhoto() {
   pendingSupplierPhotoDataUrl = null;
   document.getElementById("pending-supplier-photo-preview").style.display = "none";
   document.getElementById("pending-supplier-photo-clear").style.display = "none";
+}
+
+// ---------------------------------------------------------------
+// Item Creation / Database -- formalizes a confirmed quote into an
+// official Item record with a permanent Item # and Design #.
+// ---------------------------------------------------------------
+async function getItems() {
+  const raw = await storageGet("nextex_items");
+  try { return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
+}
+
+async function saveItems(list) {
+  await storageSet("nextex_items", JSON.stringify(list));
+}
+
+async function getNextItemNumber() {
+  const raw = await storageGet("nextex_next_item_number");
+  return raw || "";
+}
+
+async function setNextItemNumberValue(val) {
+  await storageSet("nextex_next_item_number", val);
+}
+
+let itemCreationSourceQuote = null;
+let itemCreationDesignChoice = "new";
+let itemCreationPiping = "NO";
+let itemCreationPackType = "SINGLE";
+let screenBeforeItemCreation = "log";
+
+async function openItemCreation(quoteId) {
+  const raw = await storageGet("nextex_quotes");
+  let quotes = [];
+  try { quotes = raw ? JSON.parse(raw) : []; } catch (e) { quotes = []; }
+  const entry = quotes.find(function(q) { return q.id === quoteId; });
+  if (!entry) {
+    showToast("Could not find that quote.", "error");
+    return;
+  }
+  itemCreationSourceQuote = entry;
+
+  const activeScreen = document.querySelector(".screen.active");
+  if (activeScreen) screenBeforeItemCreation = activeScreen.id.replace("screen-", "");
+
+  // Reset form state
+  itemCreationDesignChoice = "new";
+  document.querySelectorAll("#item-design-choice-group .chip").forEach(function(b) {
+    b.classList.toggle("selected", b.getAttribute("data-choice") === "new");
+  });
+  document.getElementById("item-existing-design-field").style.display = "none";
+  document.getElementById("item-brand").value = "";
+  document.getElementById("item-design-name").value = "";
+  document.getElementById("item-color").value = "";
+  document.getElementById("item-closure-type").value = "";
+  document.getElementById("item-fill-type").value = entry.cushionFillType || "";
+  document.getElementById("item-mill-ref").value = "";
+  document.getElementById("item-coating").value = "";
+  document.getElementById("item-mount-type").value = "";
+  itemCreationPiping = "NO";
+  document.querySelectorAll("#item-piping-group .chip").forEach(function(b) {
+    b.classList.toggle("selected", b.getAttribute("data-val") === "NO");
+  });
+  itemCreationPackType = "SINGLE";
+  document.querySelectorAll("#item-pack-type-group .chip").forEach(function(b) {
+    b.classList.toggle("selected", b.getAttribute("data-val") === "SINGLE");
+  });
+
+  const isCushion = entry.category === "cushions";
+  document.getElementById("item-cushion-fields").style.display = isCushion ? "block" : "none";
+  document.getElementById("item-curtain-fields").style.display = isCushion ? "none" : "block";
+
+  // Populate size options
+  const sizeSelect = document.getElementById("item-size");
+  if (isCushion) {
+    sizeSelect.innerHTML = '<option value="' + attrSafe(entry.cushionSize || "") + '">' + escapeHtml(CUSHION_SIZE_LABELS[entry.cushionSize] || entry.cushionSize || "") + '</option>';
+  } else {
+    const sizes = entry.prices || [];
+    sizeSelect.innerHTML = sizes.map(function(p) {
+      const val = p.label + (p.pair ? "|PAIR" : "");
+      return '<option value="' + attrSafe(val) + '">' + escapeHtml(p.label + (p.pair ? " (pair)" : "")) + '</option>';
+    }).join("");
+  }
+  handleItemSizeChange();
+
+  await populateExistingDesignDropdown();
+  const nextNum = await getNextItemNumber();
+  document.getElementById("item-number-display").textContent = nextNum || "(set a starting number in the Database first)";
+  document.getElementById("item-design-number-display").textContent = nextNum ? ("D-" + nextNum) : "";
+
+  document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
+  document.getElementById("screen-item-creation").classList.add("active");
+  document.getElementById("tabbar").style.display = "none";
+  updateItemDescriptionPreview();
+}
+
+function closeItemCreation() {
+  document.getElementById("tabbar").style.display = "flex";
+  showScreen(screenBeforeItemCreation);
+}
+
+function setItemDesignChoice(choice) {
+  itemCreationDesignChoice = choice;
+  document.querySelectorAll("#item-design-choice-group .chip").forEach(function(b) {
+    b.classList.toggle("selected", b.getAttribute("data-choice") === choice);
+  });
+  document.getElementById("item-existing-design-field").style.display = (choice === "existing") ? "block" : "none";
+  document.getElementById("item-design-number-display").textContent = "";
+  if (choice === "existing") {
+    handleExistingDesignChange();
+  } else {
+    getNextItemNumber().then(function(n) {
+      document.getElementById("item-design-number-display").textContent = n ? ("D-" + n) : "";
+    });
+  }
+}
+
+async function populateExistingDesignDropdown() {
+  const items = await getItems();
+  const designMap = {};
+  items.forEach(function(it) {
+    if (!designMap[it.designNumber]) {
+      designMap[it.designNumber] = it.designName || it.brand || it.designNumber;
+    }
+  });
+  const select = document.getElementById("item-existing-design-select");
+  const designIds = Object.keys(designMap);
+  if (designIds.length === 0) {
+    select.innerHTML = '<option value="">No existing designs yet</option>';
+  } else {
+    select.innerHTML = designIds.map(function(dn) {
+      return '<option value="' + attrSafe(dn) + '">' + escapeHtml(dn) + ' \u2014 ' + escapeHtml(designMap[dn]) + '</option>';
+    }).join("");
+  }
+}
+
+function handleExistingDesignChange() {
+  const select = document.getElementById("item-existing-design-select");
+  document.getElementById("item-design-number-display").textContent = select.value || "";
+}
+
+function handleItemSizeChange() {
+  const sizeSelect = document.getElementById("item-size");
+  const val = sizeSelect.value || "";
+  if (val.indexOf("|PAIR") !== -1) {
+    itemCreationPackType = "2PK";
+  } else if (itemCreationSourceQuote && itemCreationSourceQuote.category !== "cushions") {
+    itemCreationPackType = "SINGLE";
+  }
+  document.querySelectorAll("#item-pack-type-group .chip").forEach(function(b) {
+    b.classList.toggle("selected", b.getAttribute("data-val") === itemCreationPackType);
+  });
+  updateItemDescriptionPreview();
+}
+
+function setItemPiping(val) {
+  itemCreationPiping = val;
+  document.querySelectorAll("#item-piping-group .chip").forEach(function(b) {
+    b.classList.toggle("selected", b.getAttribute("data-val") === val);
+  });
+  updateItemDescriptionPreview();
+}
+
+function setItemPackType(val) {
+  itemCreationPackType = val;
+  document.querySelectorAll("#item-pack-type-group .chip").forEach(function(b) {
+    b.classList.toggle("selected", b.getAttribute("data-val") === val);
+  });
+  updateItemDescriptionPreview();
+}
+
+function buildItemDescription() {
+  if (!itemCreationSourceQuote) return "";
+  const brand = document.getElementById("item-brand").value.trim();
+  const designName = document.getElementById("item-design-name").value.trim();
+  const color = document.getElementById("item-color").value.trim();
+  const sizeSelect = document.getElementById("item-size");
+  const sizeLabel = (sizeSelect.value || "").split("|")[0];
+  const nextNum = document.getElementById("item-number-display").textContent;
+
+  if (itemCreationSourceQuote.category === "cushions") {
+    const backing = document.getElementById("item-backing").value;
+    const backingAbbrev = backing === "BACK TO BACK" ? "B2B" : "VLVT/LN";
+    const pipingAbbrev = itemCreationPiping === "NO" ? "KE" : "W/PIPING";
+    const millRef = document.getElementById("item-mill-ref").value.trim();
+    const parts = [brand, designName, color, sizeLabel, backingAbbrev, pipingAbbrev, "SHELL"].filter(function(p) { return p; });
+    let desc = parts.join(" ");
+    if (millRef) desc += " " + millRef;
+    return desc;
+  } else {
+    const parts = [nextNum, brand, sizeLabel, color].filter(function(p) { return p && p.indexOf("(set a starting") === -1; });
+    let desc = parts.join(" ");
+    if (itemCreationPackType === "2PK") desc += " 2PK";
+    return desc;
+  }
+}
+
+function updateItemDescriptionPreview() {
+  document.getElementById("item-description-preview").textContent = buildItemDescription() || "(fill in fields to preview)";
+}
+
+async function saveItem() {
+  if (!itemCreationSourceQuote) return;
+  const nextNum = await getNextItemNumber();
+  if (!nextNum) {
+    showToast("Set a starting Item # in the Database first.", "error");
+    return;
+  }
+
+  let designNumber;
+  if (itemCreationDesignChoice === "existing") {
+    const select = document.getElementById("item-existing-design-select");
+    if (!select.value) {
+      showToast("Select an existing design, or switch to New Design.", "error");
+      return;
+    }
+    designNumber = select.value;
+  } else {
+    designNumber = "D-" + nextNum;
+  }
+
+  const sizeSelect = document.getElementById("item-size");
+  const sizeLabel = (sizeSelect.value || "").split("|")[0];
+  const entry = itemCreationSourceQuote;
+
+  const item = {
+    id: "item_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+    itemNumber: nextNum,
+    designNumber: designNumber,
+    brand: document.getElementById("item-brand").value.trim(),
+    designName: document.getElementById("item-design-name").value.trim(),
+    category: entry.category,
+    size: sizeLabel,
+    color: document.getElementById("item-color").value.trim(),
+    description: buildItemDescription(),
+    vendor: entry.vendor || "",
+    customer: entry.customer || "",
+    quoteId: entry.id,
+    photo: entry.photo || "",
+    createdDate: new Date().toLocaleDateString(),
+    // cushion-specific
+    backing: entry.category === "cushions" ? document.getElementById("item-backing").value : "",
+    piping: entry.category === "cushions" ? itemCreationPiping : "",
+    closureType: entry.category === "cushions" ? document.getElementById("item-closure-type").value.trim() : "",
+    fillType: entry.category === "cushions" ? document.getElementById("item-fill-type").value.trim() : "",
+    millRef: entry.category === "cushions" ? document.getElementById("item-mill-ref").value.trim() : "",
+    // curtain-specific
+    packType: entry.category !== "cushions" ? itemCreationPackType : "",
+    coating: entry.category !== "cushions" ? document.getElementById("item-coating").value.trim() : "",
+    mountType: entry.category !== "cushions" ? document.getElementById("item-mount-type").value.trim() : ""
+  };
+
+  const items = await getItems();
+  items.push(item);
+  await saveItems(items);
+
+  // Advance the next-item-number counter by incrementing the leading digits.
+  const match = nextNum.match(/^(\d+)(.*)$/);
+  if (match) {
+    const nextVal = (parseInt(match[1], 10) + 1) + match[2];
+    await setNextItemNumberValue(nextVal);
+  }
+
+  showToast("Item " + nextNum + " created.", "success");
+  itemCreationSourceQuote = null;
+  closeItemCreation();
+  showQRCodeForItem(nextNum);
+}
+
+function openDatabaseHome() {
+  document.getElementById("hamburger-drawer").classList.remove("show");
+  document.getElementById("hamburger-backdrop").classList.remove("show");
+  const activeScreen = document.querySelector(".screen.active");
+  if (activeScreen) screenBeforeDatabaseHome = activeScreen.id.replace("screen-", "");
+
+  document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
+  document.getElementById("screen-database-home").classList.add("active");
+  document.getElementById("tabbar").style.display = "none";
+  renderDatabaseHome();
+}
+
+let screenBeforeDatabaseHome = "calc";
+
+function closeDatabaseHome() {
+  document.getElementById("tabbar").style.display = "flex";
+  showScreen(screenBeforeDatabaseHome);
+}
+
+async function saveNextItemNumberSeed() {
+  const val = document.getElementById("database-next-item-number").value.trim();
+  if (!val) {
+    showToast("Enter a starting item number.", "error");
+    return;
+  }
+  await setNextItemNumberValue(val);
+  showToast("Next item # set to " + val + ".", "success");
+}
+
+async function renderDatabaseHome() {
+  const nextNum = await getNextItemNumber();
+  document.getElementById("database-next-item-number").value = nextNum;
+
+  const items = await getItems();
+  const search = document.getElementById("database-search").value.trim().toLowerCase();
+  const filtered = search ? items.filter(function(it) { return (it.itemNumber || "").toLowerCase().indexOf(search) !== -1; }) : items;
+
+  const container = document.getElementById("database-items-list");
+  if (filtered.length === 0) {
+    container.innerHTML = '<div class="log-empty"><div class="icon">&#128193;</div>' + (items.length === 0 ? "No items created yet." : "No items match that search.") + '</div>';
+    return;
+  }
+  const sorted = filtered.slice().sort(function(a, b) { return b.createdDate.localeCompare(a.createdDate); });
+  container.innerHTML = sorted.map(function(it) {
+    return '<div class="meeting-row">' +
+      '<div class="meeting-row-info">' +
+        '<div class="meeting-row-name">' + escapeHtml(it.itemNumber) + ' &middot; ' + escapeHtml(it.designNumber) + '</div>' +
+        '<div class="meeting-row-sub">' + escapeHtml(it.description || "") + '</div>' +
+      '</div>' +
+      '<button type="button" class="cq-back-btn" style="flex:none;" onclick="showQRCodeForItem(\'' + attrSafe(it.itemNumber) + '\')">QR Code</button>' +
+    '</div>';
+  }).join("");
 }
 
 function triggerGalleryUpload() {
@@ -5477,6 +5988,62 @@ function ensureTesseractLoaded() {
 }
 
 // ---------------------------------------------------------------
+// QR code generation for Item Database records
+// ---------------------------------------------------------------
+let qrCodeLibLoadPromise = null;
+
+function ensureQRCodeLibLoaded() {
+  if (typeof window.QRCode !== "undefined") return Promise.resolve();
+  if (qrCodeLibLoadPromise) return qrCodeLibLoadPromise;
+  qrCodeLibLoadPromise = new Promise(function(resolve, reject) {
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js";
+    script.onload = function() { resolve(); };
+    script.onerror = function() { reject(new Error("Could not load QR-generation library")); };
+    document.head.appendChild(script);
+  });
+  return qrCodeLibLoadPromise;
+}
+
+let currentQRCodeItemNumber = null;
+
+async function showQRCodeForItem(itemNumber) {
+  if (!itemNumber) return;
+  try {
+    await ensureQRCodeLibLoaded();
+  } catch (e) {
+    showToast("Could not load the QR code generator. Check your connection and try again.", "error");
+    return;
+  }
+  currentQRCodeItemNumber = itemNumber;
+  document.getElementById("qr-code-item-label").textContent = itemNumber;
+  const canvas = document.getElementById("qr-code-canvas");
+  try {
+    await window.QRCode.toCanvas(canvas, itemNumber, { width: 240, margin: 2 });
+  } catch (e) {
+    showToast("Could not generate that QR code.", "error");
+    return;
+  }
+  document.getElementById("qr-code-overlay").classList.add("show");
+}
+
+function closeQRCodeModal() {
+  document.getElementById("qr-code-overlay").classList.remove("show");
+}
+
+function downloadQRCode() {
+  const canvas = document.getElementById("qr-code-canvas");
+  const url = canvas.toDataURL("image/png");
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = (currentQRCodeItemNumber || "item") + "_QR.png";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  showToast("Downloading QR code\u2026", "success");
+}
+
+// ---------------------------------------------------------------
 // Item / Style # QR code scan (loads jsQR on demand)
 // ---------------------------------------------------------------
 let jsQRLoadPromise = null;
@@ -6822,6 +7389,7 @@ function buildQuoteDetailHtml(entry) {
     }
 
     detailHtml += (entry.notes ? '<div class="log-notes">' + escapeHtml(entry.notes) + '</div>' : '');
+    detailHtml += '<button class="edit-quote-btn" style="background:var(--terracotta); color:white; border-color:var(--terracotta);" onclick="event.stopPropagation(); openItemCreation(\'' + entry.id + '\')">Create Item</button>';
     detailHtml += '<button class="edit-quote-btn" onclick="event.stopPropagation(); loadQuoteForEdit(\'' + entry.id + '\')">Edit this quote</button>';
     return detailHtml;
   }
@@ -6855,6 +7423,7 @@ function buildQuoteDetailHtml(entry) {
   if ((entry.prices || []).length > 0) {
     detailHtml += '<button class="add-to-cart-btn-quote" onclick="event.stopPropagation(); processQuoteSelections(this)">Add to customer quote</button>';
   }
+  detailHtml += '<button class="edit-quote-btn" style="background:var(--terracotta); color:white; border-color:var(--terracotta);" onclick="event.stopPropagation(); openItemCreation(\'' + entry.id + '\')">Create Item</button>';
   detailHtml += '<button class="edit-quote-btn" onclick="event.stopPropagation(); loadQuoteForEdit(\'' + entry.id + '\')">Edit this quote</button>';
   return detailHtml;
 }
