@@ -1146,7 +1146,10 @@
         </div>
         <div class="field">
           <label for="cushion-fabric-width">Fabric width (cm)</label>
-          <input type="number" id="cushion-fabric-width" step="1" value="145" inputmode="decimal" oninput="renderCushionPrice()">
+          <div class="clearable-input-wrap">
+            <input type="number" id="cushion-fabric-width" step="1" value="145" inputmode="decimal" oninput="toggleClearBtn(this); renderCushionPrice();">
+            <button type="button" class="input-clear-btn" onclick="clearInputField(this)" style="display:flex;">&#10005;</button>
+          </div>
           <div class="field-hint">Standard is 145cm. Some qualities run wider (e.g. 280cm) for better yield.</div>
         </div>
         <div class="field">
@@ -3304,6 +3307,15 @@ function sortAndFilterQuotes(list) {
   });
 }
 
+function computeCushionPriceForEntry(entry, s) {
+  if (entry.cushionQuoteBasis === "Shell" && typeof entry.fabricPrice === "number") {
+    return computeCushionShell(entry.fabricPrice, s);
+  } else if (entry.cushionQuoteBasis === "Fabric" && typeof entry.fabricPrice === "number" && typeof entry.cushionFabricWidth === "number" && entry.cushionSize) {
+    return computeCushionFabricBasis(entry.cushionSize, entry.cushionConstruction, entry.fabricPrice, entry.cushionFabricWidth, entry.cushionBackFabricPrice, entry.cushionBackFabricWidth, entry.decorativeFeatures || [], s);
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------
 // Saved quotes log
 // ---------------------------------------------------------------
@@ -3345,12 +3357,7 @@ function buildQuoteDetailHtml(entry) {
 
     // Compute and show real pricing for the two bases we've actually built.
     const s = getSettings();
-    let priceResult = null;
-    if (entry.cushionQuoteBasis === "Shell" && typeof entry.fabricPrice === "number") {
-      priceResult = computeCushionShell(entry.fabricPrice, s);
-    } else if (entry.cushionQuoteBasis === "Fabric" && typeof entry.fabricPrice === "number" && typeof entry.cushionFabricWidth === "number" && entry.cushionSize) {
-      priceResult = computeCushionFabricBasis(entry.cushionSize, entry.cushionConstruction, entry.fabricPrice, entry.cushionFabricWidth, entry.cushionBackFabricPrice, entry.cushionBackFabricWidth, entry.decorativeFeatures || [], s);
-    }
+    let priceResult = computeCushionPriceForEntry(entry, s);
 
     if (priceResult) {
       let priceStatsHtml = '<div class="log-price-grid" style="grid-template-columns:1fr 1fr; margin-top:8px;">';
@@ -3446,11 +3453,17 @@ async function renderLog() {
     row.id = "qrow_" + entry.id;
 
     const headline = (entry.prices && entry.prices[0]) ? entry.prices[0] : null;
+    const cushionPrice = (entry.category === "cushions") ? computeCushionPriceForEntry(entry, getSettings()) : null;
     const detailHtml = buildQuoteDetailHtml(entry);
     const typeBadgeText = entry.category === "cushions" ? "Cushion" : (entry.curtainType || "");
-    const headlineHtml = headline
-      ? '<span class="v">' + fmt(headline.msrp) + '</span><span class="l">MSRP &middot; ' + headline.label + '</span>'
-      : '<span class="v" style="font-size:12px;">No pricing yet</span>';
+    let headlineHtml;
+    if (headline) {
+      headlineHtml = '<span class="v">' + fmt(headline.msrp) + '</span><span class="l">MSRP &middot; ' + headline.label + '</span>';
+    } else if (cushionPrice) {
+      headlineHtml = '<span class="v">' + fmt(cushionPrice.usd) + '</span><span class="l">Shell &middot; ' + (CUSHION_SIZE_LABELS[entry.cushionSize] || entry.cushionSize || "") + '</span>';
+    } else {
+      headlineHtml = '<span class="v" style="font-size:12px;">No pricing yet</span>';
+    }
 
     const thumbHtml = entry.photo
       ? '<img class="quote-thumb" src="' + entry.photo + '" alt="" style="cursor:pointer;" onclick="openLightbox(\'' + entry.photo + '\', event)">'
