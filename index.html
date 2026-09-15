@@ -1361,6 +1361,15 @@
     </div>
   </div>
 
+  <div id="move-album-banner" class="confirm-banner">
+    <div id="move-album-message" class="confirm-message">Move to which album?</div>
+    <select id="move-album-target" style="width:100%; margin-bottom:10px;"></select>
+    <div class="confirm-actions">
+      <button class="btn btn-clear-all" id="move-album-confirm-btn" style="flex:none; padding:8px 18px;" onclick="confirmMoveAlbum()">Move</button>
+      <button class="btn" id="move-album-cancel-btn" style="flex:none; padding:8px 18px; background:var(--border); color:var(--text-primary);" onclick="cancelMoveAlbum()">Cancel</button>
+    </div>
+  </div>
+
   <div id="photo-lightbox" class="lightbox" onclick="closeLightbox()">
     <button class="lightbox-close" onclick="closeLightbox()" aria-label="Close">&#10005;</button>
     <img id="lightbox-img" src="" alt="Product photo" onclick="event.stopPropagation();">
@@ -1387,6 +1396,7 @@
         <button type="button" class="swipe-lightbox-goto-btn" id="swipe-lightbox-goto-cart-btn" onclick="goToCustomerQuoteFromGallery()" style="display:none;">Go to Customer Quote</button>
         <button type="button" class="swipe-lightbox-goto-btn" id="swipe-lightbox-goto-meeting-btn" onclick="goToMeetingFromGallery()" style="display:none;">Go to Meeting</button>
         <button type="button" class="swipe-lightbox-goto-btn" id="swipe-lightbox-goto-sourcing-btn" onclick="goToSourcingFromGallery()" style="display:none;">Go to Sourcing</button>
+        <button type="button" class="swipe-lightbox-goto-btn" id="swipe-lightbox-move-album-btn" onclick="startMoveGalleryPhoto()" style="display:none;">Move to Album</button>
         <button type="button" class="swipe-lightbox-goto-btn delete" onclick="confirmDeleteGalleryPhoto()">&#128465; Delete photo</button>
       </div>
     </div>
@@ -2003,6 +2013,7 @@
       <span id="gallery-select-count">0 selected</span>
       <select id="gallery-album-picker" onchange="handleAlbumPickerChange()"></select>
       <button type="button" class="btn btn-save" style="flex:none; padding:10px 16px;" onclick="addSelectedToAlbum()">Add</button>
+      <button type="button" class="btn btn-clear-partial" id="gallery-move-btn" style="flex:none; padding:10px 16px; display:none;" onclick="startMoveSelectedPhotos()">Move</button>
       <button type="button" class="btn btn-clear-all" style="flex:none; padding:10px 16px;" onclick="confirmDeleteSelectedPhotos()">Delete</button>
       <button type="button" class="btn btn-clear-partial" style="flex:none; padding:10px 16px;" onclick="cancelGallerySelectMode()">Cancel</button>
       <input type="text" id="gallery-new-album-name" placeholder="New album name" style="width:100%;">
@@ -4871,6 +4882,7 @@ async function toggleGallerySelectMode() {
   document.getElementById("gallery-select-toggle").style.display = "none";
   document.getElementById("gallery-select-bar").style.display = "flex";
   document.getElementById("gallery-select-count").textContent = "0 selected";
+  document.getElementById("gallery-move-btn").style.display = currentGalleryAlbumFilter ? "inline-block" : "none";
   await renderGalleryAlbumPicker();
   renderPhotoGallery();
 }
@@ -4967,6 +4979,71 @@ function downloadGalleryPhoto() {
   link.click();
   document.body.removeChild(link);
   showToast("Downloading photo\u2026", "success");
+}
+
+let moveAlbumContext = null;
+
+function startMoveGalleryPhoto() {
+  const p = galleryPhotos[galleryLightboxIndex];
+  if (!p || !currentGalleryAlbumFilter) return;
+  moveAlbumContext = { mode: "single", photo: p };
+  showMoveAlbumPicker();
+}
+
+function startMoveSelectedPhotos() {
+  if (!currentGalleryAlbumFilter) return;
+  if (selectedPhotoIndices.size === 0) {
+    showToast("Select at least one photo first.", "error");
+    return;
+  }
+  moveAlbumContext = { mode: "bulk", indices: Array.from(selectedPhotoIndices) };
+  showMoveAlbumPicker();
+}
+
+async function showMoveAlbumPicker() {
+  const albums = await getAlbums();
+  const others = albums.filter(function(a) { return a.id !== currentGalleryAlbumFilter; });
+  if (others.length === 0) {
+    showToast("Create another album first to move photos into.", "error");
+    moveAlbumContext = null;
+    return;
+  }
+  document.getElementById("move-album-target").innerHTML = others.map(function(a) {
+    return '<option value="' + a.id + '">' + escapeHtml(a.name) + '</option>';
+  }).join("");
+  document.getElementById("move-album-banner").classList.add("show");
+}
+
+function cancelMoveAlbum() {
+  document.getElementById("move-album-banner").classList.remove("show");
+  moveAlbumContext = null;
+}
+
+async function confirmMoveAlbum() {
+  if (!moveAlbumContext) return;
+  const targetAlbumId = document.getElementById("move-album-target").value;
+  const sourceAlbumId = currentGalleryAlbumFilter;
+  document.getElementById("move-album-banner").classList.remove("show");
+
+  if (moveAlbumContext.mode === "single") {
+    const p = moveAlbumContext.photo;
+    await removePhotoFromAlbum(p.sourceType, p.sourceId, sourceAlbumId);
+    await addPhotoRefToAlbum(p.sourceType, p.sourceId, targetAlbumId);
+    showToast("Photo moved.", "success");
+    closeGalleryLightbox();
+    renderPhotoGallery();
+  } else if (moveAlbumContext.mode === "bulk") {
+    const indices = moveAlbumContext.indices;
+    for (let i = 0; i < indices.length; i++) {
+      const p = galleryPhotos[indices[i]];
+      await removePhotoFromAlbum(p.sourceType, p.sourceId, sourceAlbumId);
+      await addPhotoRefToAlbum(p.sourceType, p.sourceId, targetAlbumId);
+    }
+    const count = indices.length;
+    showToast(count + (count === 1 ? " photo" : " photos") + " moved.", "success");
+    cancelGallerySelectMode();
+  }
+  moveAlbumContext = null;
 }
 
 function confirmDeleteGalleryPhoto() {
@@ -5070,6 +5147,7 @@ function showGalleryLightboxPhoto() {
   document.getElementById("swipe-lightbox-goto-cart-btn").style.display = p.cartKey ? "block" : "none";
   document.getElementById("swipe-lightbox-goto-meeting-btn").style.display = p.meetingId ? "block" : "none";
   document.getElementById("swipe-lightbox-goto-sourcing-btn").style.display = p.sourcingId ? "block" : "none";
+  document.getElementById("swipe-lightbox-move-album-btn").style.display = currentGalleryAlbumFilter ? "block" : "none";
 }
 
 function goToQuoteFromGallery() {
