@@ -304,6 +304,43 @@
   .meeting-status-badge.active { background: var(--pair-bg); color: var(--terracotta-dark); }
   .meeting-status-badge.finalized { background: #E4E9D8; color: var(--green); }
 
+  .audio-record-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    background: white;
+    border: 1.5px solid var(--rust);
+    color: var(--rust);
+    border-radius: 10px;
+    padding: 13px 0;
+    font-family: "Century Gothic", "Apple Gothic", AppleGothic, sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    cursor: pointer;
+    margin-bottom: 8px;
+  }
+  .audio-record-btn.recording {
+    background: var(--rust);
+    color: white;
+    animation: audioPulse 1.4s ease-in-out infinite;
+  }
+  @keyframes audioPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(166,92,70,0.4); }
+    50% { box-shadow: 0 0 0 8px rgba(166,92,70,0); }
+  }
+  .audio-timer {
+    text-align: center;
+    font-family: "Century Gothic", "Apple Gothic", AppleGothic, sans-serif;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--navy);
+    margin-bottom: 10px;
+  }
+
   .gallery-select-bar {
     position: fixed;
     left: 0;
@@ -2010,6 +2047,11 @@
       </div>
       <div id="meeting-detail-meta"></div>
 
+      <p class="section-label" style="margin-top:4px;">Audio recording</p>
+      <button type="button" class="audio-record-btn" id="meeting-record-btn" onclick="toggleAudioRecording('meeting')">&#9679; Start Recording</button>
+      <div class="audio-timer" id="meeting-audio-timer" style="display:none;">00:00</div>
+      <div id="meeting-audio-list"></div>
+
       <div class="field note-field">
         <label for="meeting-detail-notes">Notes</label>
         <textarea id="meeting-detail-notes" placeholder="Optional details..." onchange="saveMeetingDetailNotes()"></textarea>
@@ -2112,6 +2154,11 @@
         <span class="section-label" style="margin:0;" id="sourcing-detail-title">Sourcing</span>
       </div>
       <div id="sourcing-detail-meta"></div>
+
+      <p class="section-label" style="margin-top:4px;">Audio recording</p>
+      <button type="button" class="audio-record-btn" id="sourcing-record-btn" onclick="toggleAudioRecording('sourcing')">&#9679; Start Recording</button>
+      <div class="audio-timer" id="sourcing-audio-timer" style="display:none;">00:00</div>
+      <div id="sourcing-audio-list"></div>
 
       <div class="field note-field">
         <label for="sourcing-detail-notes">Notes</label>
@@ -3215,6 +3262,7 @@ function openMeetingDetail(meetingId, cameFrom) {
     if (activeScreen) screenBeforeMeetingDetail = activeScreen.id.replace("screen-", "");
   }
 
+  resetAudioRecordingSession("meeting");
   document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
   document.getElementById("screen-meeting-detail").classList.add("active");
   document.getElementById("tabbar").style.display = "none";
@@ -3222,6 +3270,7 @@ function openMeetingDetail(meetingId, cameFrom) {
 }
 
 function closeMeetingDetail() {
+  resetAudioRecordingSession("meeting");
   if (screenBeforeMeetingDetail === "meetings-home") {
     document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
     document.getElementById("screen-meetings-home").classList.add("active");
@@ -3397,6 +3446,146 @@ async function downloadMeetingSummary() {
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
   showToast("Downloading meeting summary\u2026", "success");
+}
+
+// ---------------------------------------------------------------
+// Audio recording (Meetings + Sourcing) -- recordings are never
+// written to persistent storage, only held in memory for the
+// current screen visit, then downloaded immediately on stop.
+// ---------------------------------------------------------------
+const audioRecorderState = {
+  meeting: { recorder: null, stream: null, chunks: [], startTime: null, timerInterval: null, recordings: [] },
+  sourcing: { recorder: null, stream: null, chunks: [], startTime: null, timerInterval: null, recordings: [] }
+};
+
+function resetAudioRecorderUI(context) {
+  const state = audioRecorderState[context];
+  if (state.timerInterval) clearInterval(state.timerInterval);
+  const btn = document.getElementById(context + "-record-btn");
+  if (btn) { btn.textContent = "\u25CF Start Recording"; btn.classList.remove("recording"); }
+  const timerEl = document.getElementById(context + "-audio-timer");
+  if (timerEl) timerEl.style.display = "none";
+}
+
+function resetAudioRecordingSession(context) {
+  const state = audioRecorderState[context];
+  if (state.recorder && state.recorder.state === "recording") {
+    state.recorder.onstop = null; // don't auto-download a recording we're discarding on navigation
+    state.recorder.stop();
+  }
+  if (state.stream) {
+    state.stream.getTracks().forEach(function(t) { t.stop(); });
+  }
+  resetAudioRecorderUI(context);
+  state.recorder = null;
+  state.stream = null;
+  state.chunks = [];
+  state.recordings = [];
+  const listEl = document.getElementById(context + "-audio-list");
+  if (listEl) listEl.innerHTML = "";
+}
+
+async function toggleAudioRecording(context) {
+  const state = audioRecorderState[context];
+  if (state.recorder && state.recorder.state === "recording") {
+    stopAudioRecording(context);
+  } else {
+    await startAudioRecording(context);
+  }
+}
+
+async function startAudioRecording(context) {
+  const state = audioRecorderState[context];
+  if (typeof navigator.mediaDevices === "undefined" || !navigator.mediaDevices.getUserMedia) {
+    showToast("Audio recording isn't supported in this browser.", "error");
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    state.stream = stream;
+    state.chunks = [];
+    const mimeType = (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported("audio/webm"))
+      ? "audio/webm" : "";
+    state.recorder = mimeType ? new MediaRecorder(stream, { mimeType: mimeType }) : new MediaRecorder(stream);
+
+    state.recorder.ondataavailable = function(e) {
+      if (e.data && e.data.size > 0) state.chunks.push(e.data);
+    };
+    state.recorder.onstop = function() {
+      const blob = new Blob(state.chunks, { type: state.recorder.mimeType || "audio/webm" });
+      const durationSec = Math.max(1, Math.round((Date.now() - state.startTime) / 1000));
+      state.recordings.push({ blob: blob, duration: durationSec, timestamp: new Date().toLocaleTimeString() });
+      state.stream.getTracks().forEach(function(t) { t.stop(); });
+      renderAudioRecordingsList(context);
+      downloadAudioRecording(context, state.recordings.length - 1);
+    };
+
+    state.recorder.start();
+    state.startTime = Date.now();
+
+    const btn = document.getElementById(context + "-record-btn");
+    btn.textContent = "\u25A0 Stop Recording";
+    btn.classList.add("recording");
+    const timerEl = document.getElementById(context + "-audio-timer");
+    timerEl.textContent = "00:00";
+    timerEl.style.display = "block";
+    state.timerInterval = setInterval(function() {
+      const elapsed = Math.round((Date.now() - state.startTime) / 1000);
+      const mins = String(Math.floor(elapsed / 60)).padStart(2, "0");
+      const secs = String(elapsed % 60).padStart(2, "0");
+      timerEl.textContent = mins + ":" + secs;
+    }, 500);
+  } catch (e) {
+    showToast("Could not access the microphone. Check permissions and try again.", "error");
+  }
+}
+
+function stopAudioRecording(context) {
+  const state = audioRecorderState[context];
+  if (state.recorder && state.recorder.state === "recording") {
+    state.recorder.stop();
+  }
+  resetAudioRecorderUI(context);
+}
+
+function renderAudioRecordingsList(context) {
+  const state = audioRecorderState[context];
+  const container = document.getElementById(context + "-audio-list");
+  if (!container) return;
+  if (state.recordings.length === 0) {
+    container.innerHTML = "";
+    return;
+  }
+  container.innerHTML = state.recordings.map(function(r, i) {
+    const mins = String(Math.floor(r.duration / 60)).padStart(2, "0");
+    const secs = String(r.duration % 60).padStart(2, "0");
+    return '<div class="meeting-row">' +
+      '<div class="meeting-row-info">' +
+        '<div class="meeting-row-name">Recording ' + (i + 1) + '</div>' +
+        '<div class="meeting-row-sub">' + mins + ':' + secs + ' &middot; ' + escapeHtml(r.timestamp) + '</div>' +
+      '</div>' +
+      '<button type="button" class="cq-back-btn" onclick="downloadAudioRecording(\'' + context + '\', ' + i + ')">Download</button>' +
+    '</div>';
+  }).join("") + '<div class="field-hint" style="margin-top:8px;">Recordings aren\u2019t saved permanently \u2014 download each one before leaving this screen. Drop the file into a Claude conversation afterward for a translated summary, then paste it into Notes.</div>';
+}
+
+function downloadAudioRecording(context, index) {
+  const state = audioRecorderState[context];
+  const r = state.recordings[index];
+  if (!r) return;
+  const url = URL.createObjectURL(r.blob);
+  const titleEl = document.getElementById(context + "-detail-title");
+  const nameLabel = (titleEl && titleEl.textContent) ? titleEl.textContent : context;
+  const safeName = nameLabel.replace(/[^a-z0-9\-_]/gi, "_");
+  const ext = (r.blob.type.indexOf("webm") !== -1) ? "webm" : "m4a";
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = safeName + "_recording_" + (index + 1) + "." + ext;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  showToast("Downloading recording\u2026", "success");
 }
 
 // ---------------------------------------------------------------
@@ -3644,6 +3833,7 @@ function openSourcingDetail(sourcingId, cameFrom) {
     if (activeScreen) screenBeforeSourcingDetail = activeScreen.id.replace("screen-", "");
   }
 
+  resetAudioRecordingSession("sourcing");
   document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
   document.getElementById("screen-sourcing-detail").classList.add("active");
   document.getElementById("tabbar").style.display = "none";
@@ -3651,6 +3841,7 @@ function openSourcingDetail(sourcingId, cameFrom) {
 }
 
 function closeSourcingDetail() {
+  resetAudioRecordingSession("sourcing");
   if (screenBeforeSourcingDetail === "sourcing-home") {
     document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
     document.getElementById("screen-sourcing-home").classList.add("active");
