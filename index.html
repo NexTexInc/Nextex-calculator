@@ -3321,13 +3321,14 @@ function buildQuoteDetailHtml(entry) {
       priceUnit = "/pc";
     }
 
+    const isABSide = entry.cushionConstruction === "A/B Side";
     const rows = [
       ["Quoted as", entry.cushionQuoteBasis],
       ["Fabric type", entry.cushionFabricType],
       ["Fabric width", (typeof entry.cushionFabricWidth === "number") ? entry.cushionFabricWidth + " cm" : ""],
       ["Construction", entry.cushionConstruction],
-      ["Back fabric price", (typeof entry.cushionBackFabricPrice === "number") ? fmt(entry.cushionBackFabricPrice) + "/m" : ""],
-      ["Back fabric width", (typeof entry.cushionBackFabricWidth === "number") ? entry.cushionBackFabricWidth + " cm" : ""],
+      ["Back fabric price", isABSide && (typeof entry.cushionBackFabricPrice === "number") ? fmt(entry.cushionBackFabricPrice) + "/m" : ""],
+      ["Back fabric width", isABSide && (typeof entry.cushionBackFabricWidth === "number") ? entry.cushionBackFabricWidth + " cm" : ""],
       ["Cushion size", CUSHION_SIZE_LABELS[entry.cushionSize] || entry.cushionSize],
       [priceLabel, (typeof entry.fabricPrice === "number") ? fmt(entry.fabricPrice) + priceUnit : ""],
       ["Fill type", entry.cushionFillType],
@@ -3341,7 +3342,42 @@ function buildQuoteDetailHtml(entry) {
       detailHtml += '<div class="log-price-cell"><span class="l">' + r[0] + '</span><span class="v" style="font-size:12px;">' + escapeHtml(String(r[1])) + '</span></div>';
     });
     detailHtml += '</div>';
-    detailHtml += '<div class="ref-box" style="margin-top:8px;">&#128717; Pricing formula not built yet for cushions.</div>';
+
+    // Compute and show real pricing for the two bases we've actually built.
+    const s = getSettings();
+    let priceResult = null;
+    if (entry.cushionQuoteBasis === "Shell" && typeof entry.fabricPrice === "number") {
+      priceResult = computeCushionShell(entry.fabricPrice, s);
+    } else if (entry.cushionQuoteBasis === "Fabric" && typeof entry.fabricPrice === "number" && typeof entry.cushionFabricWidth === "number" && entry.cushionSize) {
+      priceResult = computeCushionFabricBasis(entry.cushionSize, entry.cushionConstruction, entry.fabricPrice, entry.cushionFabricWidth, entry.cushionBackFabricPrice, entry.cushionBackFabricWidth, entry.decorativeFeatures || [], s);
+    }
+
+    if (priceResult) {
+      let priceStatsHtml = '<div class="log-price-grid" style="grid-template-columns:1fr 1fr; margin-top:8px;">';
+      if (typeof priceResult.fabricCost === "number") {
+        priceStatsHtml += '<div class="log-price-cell"><span class="l">Fabric cost</span><span class="v">' + fmt(priceResult.fabricCost) + '</span></div>';
+        if (priceResult.decorativeCost > 0) {
+          priceStatsHtml += '<div class="log-price-cell"><span class="l">Decorative</span><span class="v">' + fmt(priceResult.decorativeCost) + '</span></div>';
+        }
+      }
+      priceStatsHtml +=
+        '<div class="log-price-cell"><span class="l">Shell (USD/pc)</span><span class="v">' + fmt(priceResult.usd) + '</span></div>' +
+        '<div class="log-price-cell"><span class="l">Landed (CAD)</span><span class="v">' + fmt(priceResult.landed) + '</span></div>' +
+        '<div class="log-price-cell"><span class="l">Sell (CAD)</span><span class="v">' + fmt(priceResult.sell) + '</span></div>' +
+        '<div class="log-price-cell"><span class="l">MSRP (CAD)</span><span class="v">' + fmt(priceResult.msrp) + '</span></div>' +
+        '</div>';
+      detailHtml += priceStatsHtml;
+
+      const vendorSafe = attrSafe((entry.vendor && entry.vendor !== "(no vendor)") ? entry.vendor : "");
+      const itemSafe = attrSafe(entry.item || "");
+      const sizeLabelSafe = attrSafe(CUSHION_SIZE_LABELS[entry.cushionSize] || entry.cushionSize || "");
+      detailHtml += '<button type="button" class="add-to-cart-btn" onclick="event.stopPropagation(); addCalculatorItemToCart(\'' + itemSafe + '\', \'' + vendorSafe + '\', \'cushions\', \'' + sizeLabelSafe + '\', false, ' + priceResult.sell + ')">+ Add to customer quote</button>';
+    } else if (entry.cushionQuoteBasis === "Finished Cushion") {
+      detailHtml += '<div class="ref-box" style="margin-top:8px;">&#128717; Finished-cushion pricing formula not built yet.</div>';
+    } else {
+      detailHtml += '<div class="ref-box" style="margin-top:8px;">&#128717; Missing fields needed to price this &mdash; edit the quote to fill them in.</div>';
+    }
+
     detailHtml += (entry.notes ? '<div class="log-notes">' + escapeHtml(entry.notes) + '</div>' : '');
     detailHtml += '<button class="edit-quote-btn" onclick="event.stopPropagation(); loadQuoteForEdit(\'' + entry.id + '\')">Edit this quote</button>';
     return detailHtml;
