@@ -1739,6 +1739,7 @@
           <button type="button" class="scan-btn" style="flex:1;" onclick="triggerPhotoCamera()">Take photo</button>
           <button type="button" class="scan-btn" style="flex:1;" onclick="triggerPhotoGallery()">Upload photo</button>
         </div>
+        <button type="button" class="cq-back-btn" style="width:100%; margin-top:8px;" onclick="openPhotoPicker('calculator')">Choose from Gallery</button>
         <input type="file" id="photo-input-camera" accept="image/*" capture="environment" style="display:none;" onchange="handlePhotoSelected(event)">
         <input type="file" id="photo-input-gallery" accept="image/*" style="display:none;" onchange="handlePhotoSelected(event)">
         <div class="photo-upload-box" id="photo-box" onclick="viewPhotoIfPresent(event)">
@@ -1879,6 +1880,12 @@
           </div>
         </div>
         <button type="button" class="btn btn-clear-partial" style="flex:none; padding:0 24px; min-height:46px;" onclick="addManualSupplier()">Add</button>
+      </div>
+
+      <div class="field-row" style="gap:14px; margin-bottom:8px; align-items:center;">
+        <button type="button" class="cq-back-btn" style="flex:none;" onclick="openPhotoPicker('supplier')">Choose photo from Gallery</button>
+        <img id="pending-supplier-photo-preview" src="" alt="" style="display:none; width:32px; height:32px; border-radius:6px; object-fit:cover;">
+        <button type="button" id="pending-supplier-photo-clear" style="display:none; background:none; border:none; color:var(--rust); font-size:12px; cursor:pointer;" onclick="clearPendingSupplierPhoto()">Clear</button>
       </div>
 
       <input type="file" id="supplier-scan-input" accept="image/*" capture="environment" style="display:none;" onchange="handleSupplierCardScanned(event)">
@@ -2114,6 +2121,7 @@
         <button type="button" class="scan-btn" style="flex:1;" onclick="triggerSessionPhotoCamera('meeting')">Take photo</button>
         <button type="button" class="scan-btn" style="flex:1;" onclick="triggerSessionPhotoGallery('meeting')">Upload photo</button>
       </div>
+      <button type="button" class="cq-back-btn" style="width:100%; margin-bottom:10px;" onclick="openPhotoPicker('meeting', currentMeetingDetailId)">Choose from Gallery</button>
       <input type="file" id="meeting-photo-input-camera" accept="image/*" capture="environment" style="display:none;" onchange="handleSessionPhotoSelected(event, 'meeting')">
       <input type="file" id="meeting-photo-input-gallery" accept="image/*" style="display:none;" onchange="handleSessionPhotoSelected(event, 'meeting')">
       <div id="meeting-detail-photos"></div>
@@ -2228,6 +2236,7 @@
         <button type="button" class="scan-btn" style="flex:1;" onclick="triggerSessionPhotoCamera('sourcing')">Take photo</button>
         <button type="button" class="scan-btn" style="flex:1;" onclick="triggerSessionPhotoGallery('sourcing')">Upload photo</button>
       </div>
+      <button type="button" class="cq-back-btn" style="width:100%; margin-bottom:10px;" onclick="openPhotoPicker('sourcing', currentSourcingDetailId)">Choose from Gallery</button>
       <input type="file" id="sourcing-photo-input-camera" accept="image/*" capture="environment" style="display:none;" onchange="handleSessionPhotoSelected(event, 'sourcing')">
       <input type="file" id="sourcing-photo-input-gallery" accept="image/*" style="display:none;" onchange="handleSessionPhotoSelected(event, 'sourcing')">
       <div id="sourcing-detail-photos"></div>
@@ -2252,6 +2261,23 @@
 
       <p class="section-label" style="margin-top:20px;">New suppliers added during this sourcing</p>
       <div id="sourcing-detail-suppliers"></div>
+    </div>
+  </div>
+
+  <!-- PHOTO PICKER SCREEN -->
+  <div class="screen" id="screen-photo-picker">
+    <div class="content">
+      <div class="cq-back-header">
+        <button type="button" class="cq-back-btn" onclick="closePhotoPicker()">&#8592; Back</button>
+        <span class="section-label" style="margin:0;">Choose a Photo</span>
+      </div>
+      <div class="field">
+        <label for="photo-picker-album-filter">Album</label>
+        <select id="photo-picker-album-filter" onchange="renderPhotoPickerGrid()">
+          <option value="">All Photos</option>
+        </select>
+      </div>
+      <div id="photo-picker-grid"></div>
     </div>
   </div>
 
@@ -3605,6 +3631,126 @@ async function deleteSessionPhoto(photoId, context, entityId) {
   showToast("Photo removed.", "success");
   if (context === "meeting") renderMeetingDetail(entityId);
   else renderSourcingDetail(entityId);
+}
+
+// ---------------------------------------------------------------
+// Photo Picker -- lets any photo field (Calculator, Supplier,
+// Meeting/Sourcing) reuse a photo already in the app instead of
+// capturing or uploading a fresh one. Only shows fabric/product
+// photos (quotes + session photos) -- never supplier business cards.
+// ---------------------------------------------------------------
+let photoPickerTarget = null;
+let photoPickerEntityId = null;
+let screenBeforePhotoPicker = "calc";
+let pickerFilteredPhotos = [];
+let pendingSupplierPhotoDataUrl = null;
+
+function openPhotoPicker(target, entityId) {
+  photoPickerTarget = target;
+  photoPickerEntityId = entityId || null;
+  const activeScreen = document.querySelector(".screen.active");
+  if (activeScreen) screenBeforePhotoPicker = activeScreen.id.replace("screen-", "");
+
+  document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
+  document.getElementById("screen-photo-picker").classList.add("active");
+  document.getElementById("tabbar").style.display = "none";
+  populatePhotoPickerAlbumFilter();
+  renderPhotoPickerGrid();
+}
+
+function closePhotoPicker() {
+  if (screenBeforePhotoPicker === "meeting-detail") {
+    document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
+    document.getElementById("screen-meeting-detail").classList.add("active");
+    return;
+  }
+  if (screenBeforePhotoPicker === "sourcing-detail") {
+    document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
+    document.getElementById("screen-sourcing-detail").classList.add("active");
+    return;
+  }
+  document.getElementById("tabbar").style.display = "flex";
+  showScreen(screenBeforePhotoPicker);
+}
+
+async function populatePhotoPickerAlbumFilter() {
+  const albums = await getAlbums();
+  const select = document.getElementById("photo-picker-album-filter");
+  select.innerHTML = '<option value="">All Photos</option>' + albums.map(function(a) {
+    return '<option value="' + a.id + '">' + escapeHtml(a.name) + '</option>';
+  }).join("");
+}
+
+async function getPickerEligiblePhotos() {
+  const rawQuotes = await storageGet("nextex_quotes");
+  let quotes = [];
+  try { quotes = rawQuotes ? JSON.parse(rawQuotes) : []; } catch (e) { quotes = []; }
+  const sessionPhotos = await getSessionPhotos();
+
+  const fromQuotes = quotes.filter(function(q) { return q.photo; }).map(function(q) {
+    return { photo: q.photo, albumIds: q.albumIds || [] };
+  });
+  const fromSessions = sessionPhotos.filter(function(p) { return p.photo; }).map(function(p) {
+    return { photo: p.photo, albumIds: p.albumIds || [] };
+  });
+  return fromQuotes.concat(fromSessions);
+}
+
+async function renderPhotoPickerGrid() {
+  const albumFilter = document.getElementById("photo-picker-album-filter").value;
+  const all = await getPickerEligiblePhotos();
+  pickerFilteredPhotos = albumFilter ? all.filter(function(p) { return p.albumIds.indexOf(albumFilter) !== -1; }) : all;
+
+  const grid = document.getElementById("photo-picker-grid");
+  if (pickerFilteredPhotos.length === 0) {
+    grid.innerHTML = '<div class="log-empty"><div class="icon">&#128247;</div>No fabric or product photos here yet.</div>';
+    return;
+  }
+  grid.innerHTML = '<div class="photo-gallery-grid">' + pickerFilteredPhotos.map(function(p, i) {
+    return '<div class="photo-gallery-tile"><img src="' + p.photo + '" alt="" style="cursor:pointer;" onclick="selectPickedPhoto(' + i + ')"></div>';
+  }).join("") + '</div>';
+}
+
+async function selectPickedPhoto(index) {
+  const p = pickerFilteredPhotos[index];
+  if (!p) return;
+
+  if (photoPickerTarget === "calculator") {
+    productPhotoDataUrl = p.photo;
+    document.getElementById("photo-placeholder").style.display = "none";
+    const previewEl = document.getElementById("photo-preview");
+    previewEl.src = p.photo;
+    previewEl.style.display = "block";
+    document.getElementById("photo-remove").style.display = "flex";
+    document.getElementById("photo-box").classList.add("has-photo");
+    closePhotoPicker();
+  } else if (photoPickerTarget === "supplier") {
+    pendingSupplierPhotoDataUrl = p.photo;
+    document.getElementById("pending-supplier-photo-preview").src = p.photo;
+    document.getElementById("pending-supplier-photo-preview").style.display = "inline-block";
+    document.getElementById("pending-supplier-photo-clear").style.display = "inline-block";
+    closePhotoPicker();
+  } else if (photoPickerTarget === "meeting" || photoPickerTarget === "sourcing") {
+    const list = await getSessionPhotos();
+    list.push({
+      id: "sphoto_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+      photo: p.photo,
+      meetingId: photoPickerTarget === "meeting" ? photoPickerEntityId : null,
+      sourcingId: photoPickerTarget === "sourcing" ? photoPickerEntityId : null,
+      timestamp: new Date().toISOString()
+    });
+    await saveSessionPhotos(list);
+    showToast("Photo added.", "success");
+    closePhotoPicker();
+    if (photoPickerTarget === "meeting") renderMeetingDetail(photoPickerEntityId);
+    else renderSourcingDetail(photoPickerEntityId);
+  }
+}
+
+function clearPendingSupplierPhoto() {
+  pendingSupplierPhotoDataUrl = null;
+  document.getElementById("pending-supplier-photo-preview").style.display = "none";
+  document.getElementById("pending-supplier-photo-clear").style.display = "none";
 }
 
 function triggerGalleryUpload() {
@@ -6874,8 +7020,9 @@ async function addManualSupplier() {
     showToast("Enter a supplier name first.", "error");
     return;
   }
-  const result = await upsertSupplier(name, { source: "manual" });
+  const result = await upsertSupplier(name, { source: "manual", photo: pendingSupplierPhotoDataUrl || "" });
   input.value = "";
+  clearPendingSupplierPhoto();
   showToast("Supplier added.", "success");
   renderSupplierList();
 
