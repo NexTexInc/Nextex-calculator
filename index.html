@@ -2255,10 +2255,23 @@ async function handleItemQRScanned(event) {
     });
 
     // Diagnostic: show exactly what was captured, since this has been hard
-    // to reproduce remotely. Visible every time, temporarily, while we
-    // track this down.
+    // to reproduce remotely. Use a small resized preview, not the original
+    // data URL directly -- assigning a multi-megabyte data URL straight to
+    // an <img src> is itself a slow operation, independent of anything QR
+    // related, and was adding to the delay.
+    const previewMaxDim = 500;
+    let pw = img.width, ph = img.height;
+    if (pw > previewMaxDim || ph > previewMaxDim) {
+      const pscale = previewMaxDim / Math.max(pw, ph);
+      pw = Math.round(pw * pscale);
+      ph = Math.round(ph * pscale);
+    }
+    const previewCanvas = document.createElement("canvas");
+    previewCanvas.width = pw;
+    previewCanvas.height = ph;
+    previewCanvas.getContext("2d").drawImage(img, 0, 0, pw, ph);
     document.getElementById("item-qr-debug").style.display = "block";
-    document.getElementById("item-qr-debug-img").src = dataUrl;
+    document.getElementById("item-qr-debug-img").src = previewCanvas.toDataURL("image/jpeg", 0.7);
     statusEl.textContent = "Captured photo: " + img.width + "\u00d7" + img.height + "px. Scanning\u2026";
 
     // Try at increasing resolutions: fast first pass, then progressively
@@ -2282,7 +2295,13 @@ async function handleItemQRScanned(event) {
     // low resolution). Then one larger fallback for the opposite case: a QR
     // code that's small within a large frame, which needs more resolved
     // detail rather than less.
-    const attempts = [500, 1800];
+    // Real-world testing across several of your actual photos showed the
+    // "right" resolution for a successful decode is genuinely unpredictable
+    // and narrow -- different photos have needed 300px, 500px, 700px, and
+    // 1800px, with nothing in between working. There's no small set of
+    // guesses that reliably covers this, so we sweep more candidates,
+    // concentrated where jsQR is fastest, with one larger fallback.
+    const attempts = [300, 400, 500, 600, 700, 800, 900, 1100, 1300, 1600, 2000];
     let result = null;
 
     for (let i = 0; i < attempts.length && !result; i++) {
