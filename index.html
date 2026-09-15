@@ -177,6 +177,95 @@
     padding: 2px 5px;
     border-radius: 4px;
   }
+  .photo-gallery-tile.selectable { cursor: pointer; }
+  .photo-gallery-tile.selected { outline: 3px solid var(--terracotta); outline-offset: -3px; }
+  .photo-gallery-tile-check {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.85);
+    border: 1.5px solid var(--navy);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: var(--navy);
+  }
+  .photo-gallery-tile.selected .photo-gallery-tile-check { background: var(--terracotta); border-color: var(--terracotta-dark); }
+
+  .gallery-album-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 10px; }
+  .gallery-album-row:empty { display: none; margin-bottom: 0; }
+  .gallery-filter-row { display: flex; gap: 6px; margin-bottom: 10px; }
+  .gallery-filter-row select {
+    flex: 1;
+    min-width: 0;
+    padding: 8px 6px;
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    font-size: 11px;
+    background: white;
+    color: var(--navy);
+  }
+  .gallery-album-chip {
+    flex-shrink: 0;
+    background: white;
+    border: 1.5px solid var(--border);
+    border-radius: 20px;
+    padding: 7px 14px;
+    font-family: "Century Gothic", "Apple Gothic", AppleGothic, sans-serif;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--navy);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .gallery-select-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: white;
+    border-top: 1.5px solid var(--border);
+    box-shadow: 0 -4px 16px rgba(0,17,44,0.14);
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    z-index: 150;
+  }
+  #gallery-select-count { font-size: 12px; font-weight: 700; color: var(--navy); flex-shrink: 0; }
+  #gallery-album-picker { flex: 1; min-width: 0; padding: 10px 8px; border: 1.5px solid var(--border); border-radius: 8px; font-size: 12px; }
+  #gallery-new-album-name { display: none; margin-top: 8px; }
+
+  .albums-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .album-card { cursor: pointer; }
+  .album-card-cover {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--card);
+    border: 1.5px solid var(--border);
+    box-shadow: 2px 3px 6px rgba(0,17,44,0.10);
+  }
+  .album-card-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .album-card-cover .empty-cover { display: flex; align-items: center; justify-content: center; height: 100%; font-size: 28px; color: var(--border); }
+  .album-card-count {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    background: rgba(0,17,44,0.72);
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 10px;
+  }
+  .album-card-name { font-size: 12.5px; font-weight: 700; color: var(--navy); margin-top: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   .swipe-lightbox {
     position: fixed;
@@ -239,20 +328,21 @@
   }
   .swipe-lightbox-caption .item { color: white; font-size: 14px; font-weight: 700; }
   .swipe-lightbox-caption .vendor { color: rgba(255,255,255,0.7); font-size: 12px; margin-top: 2px; }
+  .swipe-lightbox-btn-row { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; align-items: center; }
   .swipe-lightbox-goto-btn {
-    margin-top: 12px;
     background: var(--terracotta);
     color: var(--navy-dark);
     border: none;
     border-radius: 10px;
-    padding: 11px 20px;
+    padding: 10px 20px;
     font-family: "Century Gothic", "Apple Gothic", AppleGothic, sans-serif;
-    font-size: 13px;
+    font-size: 12.5px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.3px;
     cursor: pointer;
     box-shadow: 2px 3px 6px rgba(0,0,0,0.3);
+    min-width: 200px;
   }
   .hamburger-menu-item svg { flex-shrink: 0; color: var(--terracotta-dark); }
   .header-divider { width: 1px; height: 22px; background: rgba(255,255,255,0.25); flex-shrink: 0; }
@@ -1054,6 +1144,10 @@
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg>
       <span>Photo Gallery</span>
     </button>
+    <button type="button" class="hamburger-menu-item" onclick="openAlbumsHome()">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+      <span>Albums</span>
+    </button>
   </div>
 
   <div class="header">
@@ -1107,7 +1201,11 @@
     <div class="swipe-lightbox-caption">
       <div class="item" id="swipe-lightbox-item"></div>
       <div class="vendor" id="swipe-lightbox-vendor"></div>
-      <button type="button" class="swipe-lightbox-goto-btn" id="swipe-lightbox-goto-btn" onclick="goToQuoteFromGallery()" style="display:none;">Take me to Quote</button>
+      <div class="swipe-lightbox-btn-row">
+        <button type="button" class="swipe-lightbox-goto-btn" id="swipe-lightbox-goto-quote-btn" onclick="goToQuoteFromGallery()" style="display:none;">Take me to Quote</button>
+        <button type="button" class="swipe-lightbox-goto-btn" id="swipe-lightbox-goto-supplier-btn" onclick="goToSupplierFromGallery()" style="display:none;">Go to Supplier</button>
+        <button type="button" class="swipe-lightbox-goto-btn" id="swipe-lightbox-goto-cart-btn" onclick="goToCustomerQuoteFromGallery()" style="display:none;">Go to Customer Quote</button>
+      </div>
     </div>
   </div>
 
@@ -1466,6 +1564,18 @@
           <button type="button" class="photo-remove" id="photo-remove" style="display:none;" onclick="removePhoto(event)">&#10005;</button>
         </div>
       </div>
+      <div class="field">
+        <label for="quote-customer">Customer <span style="font-weight:400; text-transform:none; color:var(--text-secondary);">(optional)</span></label>
+        <select id="quote-customer">
+          <option value="">Select customer&#8230;</option>
+          <option value="Walmart Canada">Walmart Canada</option>
+          <option value="Homesense">Homesense</option>
+          <option value="Winners Marshalls">Winners Marshalls</option>
+          <option value="Costco">Costco</option>
+          <option value="Ross Stores">Ross Stores</option>
+          <option value="Home Depot">Home Depot</option>
+        </select>
+      </div>
       <div class="field note-field">
         <label for="notes">Notes</label>
         <textarea id="notes" placeholder="Optional details..."></textarea>
@@ -1660,8 +1770,55 @@
         <button type="button" class="cq-back-btn" onclick="closePhotoGallery()">&#8592; Back</button>
         <span class="section-label" style="margin:0;">Photo Gallery</span>
       </div>
-      <div class="field-hint" style="margin-bottom:14px;">Every photo you've taken across Saved Quotes and Suppliers, in one place.</div>
+      <div class="field-hint" style="margin-bottom:10px;">Every photo you've taken across Saved Quotes and Suppliers, in one place.</div>
+
+      <div id="gallery-album-row" class="gallery-album-row"></div>
+
+      <div id="gallery-filter-row" class="gallery-filter-row">
+        <select id="gallery-filter-customer" onchange="renderPhotoGallery()">
+          <option value="">All customers</option>
+          <option value="Walmart Canada">Walmart Canada</option>
+          <option value="Homesense">Homesense</option>
+          <option value="Winners Marshalls">Winners Marshalls</option>
+          <option value="Costco">Costco</option>
+          <option value="Ross Stores">Ross Stores</option>
+          <option value="Home Depot">Home Depot</option>
+        </select>
+        <select id="gallery-filter-supplier" onchange="renderPhotoGallery()">
+          <option value="">All suppliers</option>
+        </select>
+        <select id="gallery-filter-category" onchange="renderPhotoGallery()">
+          <option value="">All categories</option>
+          <option value="curtains">Curtains</option>
+          <option value="cushions">Cushions</option>
+        </select>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; margin-bottom:8px;">
+        <button type="button" class="cq-back-btn" id="gallery-select-toggle" onclick="toggleGallerySelectMode()">Select photos</button>
+      </div>
+
       <div id="photo-gallery-grid"></div>
+    </div>
+
+    <div id="gallery-select-bar" class="gallery-select-bar" style="display:none; flex-wrap:wrap;">
+      <span id="gallery-select-count">0 selected</span>
+      <select id="gallery-album-picker" onchange="handleAlbumPickerChange()"></select>
+      <button type="button" class="btn btn-save" style="flex:none; padding:10px 16px;" onclick="addSelectedToAlbum()">Add</button>
+      <button type="button" class="btn btn-clear-partial" style="flex:none; padding:10px 16px;" onclick="cancelGallerySelectMode()">Cancel</button>
+      <input type="text" id="gallery-new-album-name" placeholder="New album name" style="width:100%;">
+    </div>
+  </div>
+
+  <!-- ALBUMS HOME SCREEN (accessed via hamburger menu) -->
+  <div class="screen" id="screen-albums">
+    <div class="content">
+      <div class="cq-back-header">
+        <button type="button" class="cq-back-btn" onclick="closeAlbumsHome()">&#8592; Back</button>
+        <span class="section-label" style="margin:0;">Albums</span>
+      </div>
+      <div class="field-hint" style="margin-bottom:14px;">Group photos from a trade show, a supplier, or however you like &mdash; a photo can be in more than one album.</div>
+      <div id="albums-grid"></div>
     </div>
   </div>
 
@@ -2452,8 +2609,106 @@ function toggleHamburgerMenu() {
 }
 
 let screenBeforeGallery = "calc";
+let screenBeforeAlbumsHome = "calc";
 let galleryPhotos = [];
 let galleryLightboxIndex = 0;
+let gallerySelectMode = false;
+let selectedPhotoIndices = new Set();
+let currentGalleryAlbumFilter = null; // null = all photos, else an album id
+
+async function getAlbums() {
+  const raw = await storageGet("nextex_albums");
+  try { return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
+}
+
+async function saveAlbums(albums) {
+  await storageSet("nextex_albums", JSON.stringify(albums));
+}
+
+async function createAlbum(name) {
+  const albums = await getAlbums();
+  const album = { id: "alb_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7), name: name, createdDate: new Date().toLocaleDateString() };
+  albums.push(album);
+  await saveAlbums(albums);
+  return album;
+}
+
+async function addPhotoRefToAlbum(sourceType, sourceId, albumId) {
+  const storageKey = sourceType === "quote" ? "nextex_quotes" : "nextex_suppliers";
+  const raw = await storageGet(storageKey);
+  let list = [];
+  try { list = raw ? JSON.parse(raw) : []; } catch (e) { list = []; }
+  const entry = list.find(function(e) { return e.id === sourceId; });
+  if (!entry) return;
+  if (!entry.albumIds) entry.albumIds = [];
+  if (entry.albumIds.indexOf(albumId) === -1) entry.albumIds.push(albumId);
+  await storageSet(storageKey, JSON.stringify(list));
+}
+
+async function openAlbumsHome() {
+  document.getElementById("hamburger-drawer").classList.remove("show");
+  document.getElementById("hamburger-backdrop").classList.remove("show");
+
+  const activeScreen = document.querySelector(".screen.active");
+  if (activeScreen) screenBeforeAlbumsHome = activeScreen.id.replace("screen-", "");
+
+  document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
+  document.getElementById("screen-albums").classList.add("active");
+  document.getElementById("tabbar").style.display = "none";
+
+  await renderAlbumsHome();
+  window.scrollTo(0, 0);
+}
+
+function closeAlbumsHome() {
+  document.getElementById("tabbar").style.display = "flex";
+  showScreen(screenBeforeAlbumsHome);
+}
+
+async function renderAlbumsHome() {
+  const grid = document.getElementById("albums-grid");
+  const albums = await getAlbums();
+
+  if (albums.length === 0) {
+    grid.innerHTML = '<div class="log-empty"><div class="icon">&#128193;</div>No albums yet.<br>Select photos in the Photo Gallery and add them to a new album.</div>';
+    return;
+  }
+
+  const rawQuotes = await storageGet("nextex_quotes");
+  let quotes = [];
+  try { quotes = rawQuotes ? JSON.parse(rawQuotes) : []; } catch (e) { quotes = []; }
+  const rawSuppliers = await storageGet("nextex_suppliers");
+  let suppliers = [];
+  try { suppliers = rawSuppliers ? JSON.parse(rawSuppliers) : []; } catch (e) { suppliers = []; }
+
+  const allPhotoEntries = quotes.filter(function(q) { return q.photo; })
+    .concat(suppliers.filter(function(s) { return s.photo; }));
+
+  grid.innerHTML = '<div class="albums-grid">' + albums.map(function(a) {
+    const members = allPhotoEntries.filter(function(e) { return (e.albumIds || []).indexOf(a.id) !== -1; });
+    const cover = members[0];
+    return '<div class="album-card" onclick="openAlbum(\'' + a.id + '\')">' +
+      '<div class="album-card-cover">' +
+        (cover ? '<img src="' + cover.photo + '" alt="">' : '<div class="empty-cover">&#128247;</div>') +
+        '<span class="album-card-count">' + members.length + '</span>' +
+      '</div>' +
+      '<div class="album-card-name">' + escapeHtml(a.name) + '</div>' +
+    '</div>';
+  }).join("") + '</div>';
+}
+
+function openAlbum(albumId) {
+  gallerySelectMode = false;
+  selectedPhotoIndices = new Set();
+  document.getElementById("gallery-select-toggle").style.display = "inline-block";
+  document.getElementById("gallery-select-bar").style.display = "none";
+  document.getElementById("tabbar").style.display = "none";
+  screenBeforeGallery = "albums";
+  document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
+  document.getElementById("screen-gallery").classList.add("active");
+  currentGalleryAlbumFilter = albumId;
+  renderPhotoGallery();
+}
 
 async function openPhotoGallery() {
   document.getElementById("hamburger-drawer").classList.remove("show");
@@ -2465,18 +2720,32 @@ async function openPhotoGallery() {
   document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
   document.getElementById("screen-gallery").classList.add("active");
   document.getElementById("tabbar").style.display = "none";
+  currentGalleryAlbumFilter = null;
 
   await renderPhotoGallery();
   window.scrollTo(0, 0);
 }
 
 function closePhotoGallery() {
+  gallerySelectMode = false;
+  selectedPhotoIndices = new Set();
+  document.getElementById("gallery-select-toggle").style.display = "inline-block";
+  document.getElementById("gallery-select-bar").style.display = "none";
+
+  if (screenBeforeGallery === "albums") {
+    document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
+    document.getElementById("screen-albums").classList.add("active");
+    renderAlbumsHome();
+    return;
+  }
+
   document.getElementById("tabbar").style.display = "flex";
   showScreen(screenBeforeGallery);
 }
 
 async function renderPhotoGallery() {
   const grid = document.getElementById("photo-gallery-grid");
+  const hintEl = document.querySelector("#screen-gallery .field-hint");
 
   const rawQuotes = await storageGet("nextex_quotes");
   let quotes = [];
@@ -2486,29 +2755,191 @@ async function renderPhotoGallery() {
   let suppliers = [];
   try { suppliers = rawSuppliers ? JSON.parse(rawSuppliers) : []; } catch (e) { suppliers = []; }
 
+  const albums = await getAlbums();
+
+  function findSupplierIdByVendor(vendorName) {
+    if (!vendorName) return null;
+    const target = vendorName.toLowerCase();
+    const match = suppliers.find(function(s) { return (s.name || "").toLowerCase() === target; });
+    return match ? match.id : null;
+  }
+  function findCartKeyByItemVendor(itemVal, vendorVal) {
+    const match = customerCart.find(function(c) {
+      return c.item === (itemVal || "(no item #)") && c.vendor === ((vendorVal && vendorVal !== "(no vendor)") ? vendorVal : "");
+    });
+    return match ? match.key : null;
+  }
+
   galleryPhotos = [];
   quotes.forEach(function(q) {
     if (q.photo) {
-      galleryPhotos.push({ photo: q.photo, item: q.item || "(no item #)", vendor: q.vendor || "", badge: "Quote", quoteId: q.id });
+      galleryPhotos.push({
+        photo: q.photo, item: q.item || "(no item #)", vendor: q.vendor || "", badge: "Quote",
+        sourceType: "quote", sourceId: q.id,
+        quoteId: q.id,
+        supplierId: findSupplierIdByVendor(q.vendor),
+        cartKey: findCartKeyByItemVendor(q.item, q.vendor),
+        albumIds: q.albumIds || [],
+        customer: q.customer || "",
+        category: q.category === "cushions" ? "cushions" : "curtains"
+      });
     }
   });
   suppliers.forEach(function(s) {
     if (s.photo) {
-      galleryPhotos.push({ photo: s.photo, item: s.name || "(supplier)", vendor: "Business card", badge: "Supplier", quoteId: null });
+      galleryPhotos.push({
+        photo: s.photo, item: s.name || "(supplier)", vendor: "Business card", badge: "Supplier",
+        sourceType: "supplier", sourceId: s.id,
+        quoteId: null, supplierId: s.id, cartKey: null,
+        albumIds: s.albumIds || [],
+        customer: "", category: ""
+      });
     }
   });
 
+  // Populate the supplier filter dropdown from actual vendor names in use.
+  const supplierFilterEl = document.getElementById("gallery-filter-supplier");
+  if (supplierFilterEl) {
+    const currentSupplierFilter = supplierFilterEl.value;
+    const vendorNames = Array.from(new Set(
+      galleryPhotos.map(function(p) { return (p.vendor && p.vendor !== "Business card") ? p.vendor : null; }).filter(function(v) { return !!v; })
+        .concat(suppliers.map(function(s) { return s.name; }).filter(function(v) { return !!v; }))
+    )).sort(function(a, b) { return a.toLowerCase().localeCompare(b.toLowerCase()); });
+    supplierFilterEl.innerHTML = '<option value="">All suppliers</option>' + vendorNames.map(function(v) {
+      return '<option value="' + escapeHtml(v) + '">' + escapeHtml(v) + '</option>';
+    }).join("");
+    supplierFilterEl.value = currentSupplierFilter;
+  }
+
+  const filterRow = document.getElementById("gallery-filter-row");
+  if (filterRow) filterRow.style.display = currentGalleryAlbumFilter ? "none" : "flex";
+
+  if (!currentGalleryAlbumFilter) {
+    const customerFilter = document.getElementById("gallery-filter-customer").value;
+    const supplierFilter = document.getElementById("gallery-filter-supplier").value;
+    const categoryFilter = document.getElementById("gallery-filter-category").value;
+
+    if (customerFilter) galleryPhotos = galleryPhotos.filter(function(p) { return p.customer === customerFilter; });
+    if (supplierFilter) {
+      // A supplier's own business card counts as a match on its own name,
+      // even though its "vendor" field is the "Business card" placeholder.
+      galleryPhotos = galleryPhotos.filter(function(p) {
+        return p.vendor === supplierFilter || (p.badge === "Supplier" && p.item === supplierFilter);
+      });
+    }
+    if (categoryFilter) galleryPhotos = galleryPhotos.filter(function(p) { return p.category === categoryFilter; });
+  }
+
+  if (currentGalleryAlbumFilter) {
+    galleryPhotos = galleryPhotos.filter(function(p) { return p.albumIds.indexOf(currentGalleryAlbumFilter) !== -1; });
+    const activeAlbum = albums.find(function(a) { return a.id === currentGalleryAlbumFilter; });
+    if (hintEl) hintEl.textContent = activeAlbum ? ("Album: " + activeAlbum.name) : "Album";
+  } else if (hintEl) {
+    hintEl.textContent = "Every photo you've taken across Saved Quotes and Suppliers, in one place.";
+  }
+
+  // Quick-access chips to jump into an album, only shown on the unfiltered view.
+  const albumRow = document.getElementById("gallery-album-row");
+  if (albumRow) {
+    albumRow.innerHTML = (!currentGalleryAlbumFilter && albums.length > 0)
+      ? albums.map(function(a) { return '<button type="button" class="gallery-album-chip" onclick="openAlbum(\'' + a.id + '\')">' + escapeHtml(a.name) + '</button>'; }).join("")
+      : "";
+  }
+
   if (galleryPhotos.length === 0) {
-    grid.innerHTML = '<div class="log-empty"><div class="icon">&#128247;</div>No photos yet.<br>Photos you take on quotes or business card scans will show up here.</div>';
+    const filtersActive = !currentGalleryAlbumFilter && (
+      document.getElementById("gallery-filter-customer").value ||
+      document.getElementById("gallery-filter-supplier").value ||
+      document.getElementById("gallery-filter-category").value
+    );
+    if (filtersActive) {
+      grid.innerHTML = '<div class="log-empty"><div class="icon">&#128247;</div>No photos match these filters.</div>';
+    } else if (currentGalleryAlbumFilter) {
+      grid.innerHTML = '<div class="log-empty"><div class="icon">&#128193;</div>No photos in this album yet.</div>';
+    } else {
+      grid.innerHTML = '<div class="log-empty"><div class="icon">&#128247;</div>No photos yet.<br>Photos you take on quotes or business card scans will show up here.</div>';
+    }
     return;
   }
 
   grid.innerHTML = '<div class="photo-gallery-grid">' + galleryPhotos.map(function(p, i) {
-    return '<div class="photo-gallery-tile" onclick="openGalleryLightbox(' + i + ')">' +
+    const isSelected = selectedPhotoIndices.has(i);
+    const tileClass = "photo-gallery-tile" + (gallerySelectMode ? " selectable" + (isSelected ? " selected" : "") : "");
+    const clickHandler = gallerySelectMode ? "togglePhotoSelection(" + i + ")" : "openGalleryLightbox(" + i + ")";
+    return '<div class="' + tileClass + '" onclick="' + clickHandler + '">' +
       '<img src="' + p.photo + '" alt="">' +
-      '<span class="photo-gallery-badge">' + escapeHtml(p.badge) + '</span>' +
+      (gallerySelectMode ? '<span class="photo-gallery-tile-check">' + (isSelected ? "&#10003;" : "") + '</span>' : '<span class="photo-gallery-badge">' + escapeHtml(p.badge) + '</span>') +
     '</div>';
   }).join("") + '</div>';
+}
+
+async function toggleGallerySelectMode() {
+  gallerySelectMode = true;
+  selectedPhotoIndices = new Set();
+  document.getElementById("gallery-select-toggle").style.display = "none";
+  document.getElementById("gallery-select-bar").style.display = "flex";
+  document.getElementById("gallery-select-count").textContent = "0 selected";
+  await renderGalleryAlbumPicker();
+  renderPhotoGallery();
+}
+
+function cancelGallerySelectMode() {
+  gallerySelectMode = false;
+  selectedPhotoIndices = new Set();
+  document.getElementById("gallery-select-toggle").style.display = "inline-block";
+  document.getElementById("gallery-select-bar").style.display = "none";
+  document.getElementById("gallery-new-album-name").style.display = "none";
+  document.getElementById("gallery-new-album-name").value = "";
+  renderPhotoGallery();
+}
+
+function togglePhotoSelection(index) {
+  if (selectedPhotoIndices.has(index)) selectedPhotoIndices.delete(index);
+  else selectedPhotoIndices.add(index);
+  document.getElementById("gallery-select-count").textContent = selectedPhotoIndices.size + " selected";
+  renderPhotoGallery();
+}
+
+async function renderGalleryAlbumPicker() {
+  const picker = document.getElementById("gallery-album-picker");
+  const albums = await getAlbums();
+  picker.innerHTML = albums.map(function(a) {
+    return '<option value="' + a.id + '">' + escapeHtml(a.name) + '</option>';
+  }).join("") + '<option value="__new__">+ New album&#8230;</option>';
+  document.getElementById("gallery-new-album-name").style.display = (albums.length === 0) ? "block" : "none";
+}
+
+function handleAlbumPickerChange() {
+  const picker = document.getElementById("gallery-album-picker");
+  document.getElementById("gallery-new-album-name").style.display = (picker.value === "__new__") ? "block" : "none";
+}
+
+async function addSelectedToAlbum() {
+  if (selectedPhotoIndices.size === 0) {
+    showToast("Select at least one photo first.", "error");
+    return;
+  }
+  const picker = document.getElementById("gallery-album-picker");
+  let targetAlbumId = picker.value;
+
+  if (targetAlbumId === "__new__" || !targetAlbumId) {
+    const name = document.getElementById("gallery-new-album-name").value.trim();
+    if (!name) {
+      showToast("Enter a name for the new album.", "error");
+      return;
+    }
+    const album = await createAlbum(name);
+    targetAlbumId = album.id;
+  }
+
+  const indices = Array.from(selectedPhotoIndices);
+  for (let i = 0; i < indices.length; i++) {
+    const p = galleryPhotos[indices[i]];
+    await addPhotoRefToAlbum(p.sourceType, p.sourceId, targetAlbumId);
+  }
+
+  showToast(indices.length + (indices.length === 1 ? " photo" : " photos") + " added to album.", "success");
+  cancelGallerySelectMode();
 }
 
 function openGalleryLightbox(index) {
@@ -2528,7 +2959,9 @@ function showGalleryLightboxPhoto() {
   document.getElementById("swipe-lightbox-item").textContent = p.item;
   document.getElementById("swipe-lightbox-vendor").textContent = p.vendor;
   document.getElementById("swipe-lightbox-counter").textContent = (galleryLightboxIndex + 1) + " / " + galleryPhotos.length;
-  document.getElementById("swipe-lightbox-goto-btn").style.display = p.quoteId ? "block" : "none";
+  document.getElementById("swipe-lightbox-goto-quote-btn").style.display = p.quoteId ? "block" : "none";
+  document.getElementById("swipe-lightbox-goto-supplier-btn").style.display = p.supplierId ? "block" : "none";
+  document.getElementById("swipe-lightbox-goto-cart-btn").style.display = p.cartKey ? "block" : "none";
 }
 
 function goToQuoteFromGallery() {
@@ -2560,6 +2993,47 @@ function goToQuoteFromGallery() {
     row.scrollIntoView({ behavior: "smooth", block: "start" });
   }, 150);
 }
+
+function goToSupplierFromGallery() {
+  const p = galleryPhotos[galleryLightboxIndex];
+  if (!p || !p.supplierId) return;
+  const supplierId = p.supplierId;
+
+  closeGalleryLightbox();
+  document.getElementById("tabbar").style.display = "flex";
+  showScreen("suppliers");
+
+  setTimeout(function() {
+    const row = document.getElementById("srow_" + supplierId);
+    if (!row) {
+      showToast("Could not find that supplier \u2014 it may have been deleted.", "error");
+      return;
+    }
+    row.classList.add("open");
+    row.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, 150);
+}
+
+function goToCustomerQuoteFromGallery() {
+  const p = galleryPhotos[galleryLightboxIndex];
+  if (!p || !p.cartKey) return;
+  const cartKey = p.cartKey;
+
+  closeGalleryLightbox();
+  document.getElementById("tabbar").style.display = "flex";
+  expandedCartKey = cartKey;
+  showScreen("customer");
+
+  setTimeout(function() {
+    const row = document.getElementById("cartline_" + cartKey);
+    if (!row) {
+      showToast("Could not find that item in the customer quote \u2014 it may have been removed.", "error");
+      return;
+    }
+    row.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, 150);
+}
+
 
 function galleryLightboxNext() {
   if (galleryLightboxIndex < galleryPhotos.length - 1) {
@@ -2859,6 +3333,7 @@ async function saveQuote() {
       vendor: vendorVal,
       item: itemVal,
       notes: document.getElementById("notes").value || "",
+      customer: document.getElementById("quote-customer").value || "",
       photo: productPhotoDataUrl || "",
       fabricPrice: parseFloat(document.getElementById("price").value) || null,
       cushionQuoteBasis: document.getElementById("cushion-quote-basis").value || "",
@@ -2891,6 +3366,7 @@ async function saveQuote() {
       item: document.getElementById("item").value || "",
       curtainType: selectedCurtainType || "",
       notes: document.getElementById("notes").value || "",
+      customer: document.getElementById("quote-customer").value || "",
       photo: productPhotoDataUrl || "",
       fabricPrice: price,
       fabricWidth: width,
@@ -2946,6 +3422,7 @@ function clearAll() {
     document.getElementById("width").value = "";
     toggleClearBtn(document.getElementById("width"));
     document.getElementById("notes").value = "";
+    document.getElementById("quote-customer").value = "";
     document.getElementById("scan-status").textContent = "";
     selectedCurtainType = null;
     document.querySelectorAll("#curtain-type-group .chip").forEach(function(btn) {
@@ -2999,6 +3476,7 @@ async function loadQuoteForEdit(id) {
   document.getElementById("item").value = entry.item || "";
   toggleClearBtn(document.getElementById("item"));
   document.getElementById("notes").value = entry.notes || "";
+  document.getElementById("quote-customer").value = entry.customer || "";
   document.getElementById("price").value = (typeof entry.fabricPrice === "number") ? entry.fabricPrice : "";
   toggleClearBtn(document.getElementById("price"));
 
@@ -3514,7 +3992,7 @@ function renderCustomerQuote() {
     grandTotal += lineTotal;
     const keySafe = attrSafe(c.key);
     const isOpen = (expandedCartKey === c.key);
-    return '<div class="cart-line-wrap' + (isOpen ? " open" : "") + '">' +
+    return '<div class="cart-line-wrap' + (isOpen ? " open" : "") + '" id="cartline_' + keySafe + '">' +
       '<div class="cart-line" onclick="toggleCartLine(\'' + keySafe + '\')">' +
         '<span class="table-chevron cart-line-chevron">&#9656;</span>' +
         '<div class="cart-line-info">' +
