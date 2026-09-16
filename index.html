@@ -1903,7 +1903,10 @@
         </span>
       </p>
       <div class="field-row" style="gap:8px; margin-bottom:10px;">
-        <input type="text" id="saved-quotes-search" placeholder="Search by item # or supplier..." style="flex:1;" oninput="renderLog()">
+        <div class="clearable-input-wrap" style="flex:1;">
+          <input type="text" id="saved-quotes-search" placeholder="Search by item # or supplier..." oninput="toggleClearBtn(this); renderLog();">
+          <button type="button" class="input-clear-btn" onclick="clearInputField(this)" style="display:none;">&#10005;</button>
+        </div>
         <button type="button" class="scan-btn" style="flex:none; padding:0 16px;" onclick="triggerSavedQuoteScan()">Scan</button>
       </div>
       <input type="file" id="saved-quote-scan-input" accept="image/*" capture="environment" style="display:none;" onchange="handleSavedQuoteScan(event)">
@@ -7627,7 +7630,9 @@ async function handleSavedQuoteScan(event) {
   try {
     const result = await decodeQRFromPhotoFile(file, function(msg) { statusEl.textContent = msg; });
     if (result && result.data) {
-      document.getElementById("saved-quotes-search").value = result.data;
+      const searchInput = document.getElementById("saved-quotes-search");
+      searchInput.value = result.data;
+      toggleClearBtn(searchInput);
       renderLog();
       statusEl.textContent = "Scanned: " + result.data;
       showToast("Searching for \u201c" + result.data + "\u201d.", "success");
