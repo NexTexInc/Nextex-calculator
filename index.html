@@ -5189,26 +5189,27 @@ async function exportStickerSheetPDF() {
 
   showToast("Building Sticker Sheet\u2026", "success");
 
-  // Exact measurements extracted from the SI-LABEL-LS-0101 (S001) template's
-  // own XML (twips, where 1440 twips = 1in = 72pt, so twips/20 = points
-  // exactly -- used directly rather than rounded decimals to avoid adding
-  // any imprecision of our own on top of the template's).
+  // Exact measurements extracted from the Avery 22805 template's own XML
+  // (twips, where 1440 twips = 1in = 72pt, so twips/20 = points exactly --
+  // used directly rather than rounded decimals to avoid adding any
+  // imprecision of our own on top of the template's). Cross-checked against
+  // Avery's own published spec: 1.5in x 1.5in, 24 labels per sheet.
   const twipsToPt = function(twips) { return twips / 20; };
-  const PAGE_W = twipsToPt(12240);   // 8.5in
-  const PAGE_H = twipsToPt(15840);   // 11in
-  const MARGIN_TOP = twipsToPt(720); // 0.5in
-  const MARGIN_LEFT = twipsToPt(540 + 29); // 0.375in left margin + the template's own tblInd offset
-  const CELL_W = twipsToPt(1392);
-  const CELL_H = twipsToPt(1440);    // 1.0in
-  const H_GAP = twipsToPt(236);
-  const V_GAP = twipsToPt(180);
-  const COLS = 7;
-  const ROWS = 9;
+  const PAGE_W = twipsToPt(12240);    // 8.5in
+  const PAGE_H = twipsToPt(15840);    // 11in
+  const MARGIN_TOP = twipsToPt(720);  // 0.5in
+  const MARGIN_LEFT = twipsToPt(1248); // 0.8667in (this template's tblInd is 0)
+  const CELL_W = twipsToPt(2160);     // 1.5in
+  const CELL_H = twipsToPt(2160);     // 1.5in
+  const H_GAP = twipsToPt(451);
+  const V_GAP = twipsToPt(288);
+  const COLS = 4;
+  const ROWS = 6;
   const PER_PAGE = COLS * ROWS;
 
-  // QR sized to leave room for a caption below, within the 1" cell height.
-  const QR_SIZE = 50;
-  const CAPTION_FONT_SIZE = 6.5;
+  // QR and caption scaled up to make use of the larger 1.5" cell.
+  const QR_SIZE = 78;
+  const CAPTION_FONT_SIZE = 9;
 
   const pdfDoc = await window.PDFLib.PDFDocument.create();
   const font = await pdfDoc.embedFont(window.PDFLib.StandardFonts.Helvetica);
@@ -9224,6 +9225,7 @@ async function upsertSupplier(name, opts) {
       email: opts.email || "",
       phone: opts.phone || "",
       address: opts.address || "",
+      wechat: opts.wechat || "",
       category: "",
       notes: "",
       dateAdded: new Date().toLocaleDateString()
@@ -9237,7 +9239,7 @@ async function upsertSupplier(name, opts) {
       existing.rawText = opts.rawText || existing.rawText;
     }
     // Field-level merge: only fill blanks, never overwrite a value the user already has/entered.
-    ["contactName", "email", "phone", "address"].forEach(function(field) {
+    ["contactName", "email", "phone", "address", "wechat"].forEach(function(field) {
       if (!existing[field] && opts[field]) existing[field] = opts[field];
     });
   }
@@ -9388,6 +9390,10 @@ async function renderSupplierList() {
             '<label>Contact phone #</label>' +
             '<input type="tel" value="' + escapeHtml(s.phone || "") + '" placeholder="\u2014" onchange="updateSupplierField(\'' + s.id + '\',\'phone\',this.value)">' +
           '</div>' +
+        '</div>' +
+        '<div class="field">' +
+          '<label>WeChat ID</label>' +
+          '<input type="text" value="' + escapeHtml(s.wechat || "") + '" placeholder="\u2014" onchange="updateSupplierField(\'' + s.id + '\',\'wechat\',this.value)">' +
         '</div>' +
         '<div class="field">' +
           '<label>Address</label>' +
