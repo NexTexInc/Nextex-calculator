@@ -4507,13 +4507,34 @@ async function renderDatabaseHome() {
     return;
   }
   const sorted = filtered.slice().sort(function(a, b) { return b.createdDate.localeCompare(a.createdDate); });
-  container.innerHTML = sorted.map(function(it) {
-    return '<div class="meeting-row">' +
-      '<div class="meeting-row-info">' +
-        '<div class="meeting-row-name">' + escapeHtml(it.itemNumber) + ' &middot; ' + escapeHtml(it.designNumber) + '</div>' +
-        '<div class="meeting-row-sub">' + escapeHtml(it.description || "") + '</div>' +
+  container.innerHTML = sorted.map(function(it, idx) {
+    const rowId = "dbrow_" + idx;
+    const detailFields = [
+      ["Brand", it.brand], ["Design Name", it.designName], ["Category", it.category],
+      ["Size", it.size], ["Color", it.color],
+      ["Vendor", it.vendor], ["Customer", it.customer], ["Cost (USD)", it.cost != null ? fmt(it.cost) : ""],
+      ["Backing", it.backing], ["Piping", it.piping], ["Closure Type", it.closureType],
+      ["Fill Type", it.fillType], ["Mill Ref", it.millRef],
+      ["Pack Type", it.packType], ["Coating", it.coating], ["Mount Type", it.mountType],
+      ["Created", it.createdDate]
+    ];
+    const detailRowsHtml = detailFields.filter(function(f) { return f[1]; }).map(function(f) {
+      return '<div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--border);">' +
+        '<span style="color:var(--text-secondary); font-size:12px;">' + escapeHtml(f[0]) + '</span>' +
+        '<span style="font-weight:600; font-size:13px; color:var(--navy); text-align:right;">' + escapeHtml(String(f[1])) + '</span>' +
+      '</div>';
+    }).join("");
+
+    return '<div class="quote-row" id="' + rowId + '">' +
+      '<div class="quote-main-line" style="padding:12px; cursor:pointer;" onclick="document.getElementById(\'' + rowId + '\').classList.toggle(\'open\')">' +
+        '<span class="quote-chevron">&#9656;</span>' +
+        '<div class="meeting-row-info">' +
+          '<div class="meeting-row-name">' + escapeHtml(it.itemNumber) + ' &middot; ' + escapeHtml(it.designNumber) + '</div>' +
+          '<div class="meeting-row-sub">' + escapeHtml(it.description || "") + '</div>' +
+        '</div>' +
+        '<button type="button" class="cq-back-btn" style="flex:none;" onclick="event.stopPropagation(); showQRCodeForItem(\'' + attrSafe(it.itemNumber) + '\')">QR Code</button>' +
       '</div>' +
-      '<button type="button" class="cq-back-btn" style="flex:none;" onclick="showQRCodeForItem(\'' + attrSafe(it.itemNumber) + '\')">QR Code</button>' +
+      '<div class="quote-detail" style="padding:0 12px 14px 12px;">' + detailRowsHtml + '</div>' +
     '</div>';
   }).join("");
 }
@@ -4562,11 +4583,11 @@ async function exportItemMaster() {
   const sheet = workbook.addWorksheet("Item Master");
 
   const headers = [
-    "QR Code", "Item #", "Design #", "Category", "Brand", "Design Name", "Size", "Color",
+    "QR Code", "Item #", "Description", "Design #", "Category", "Brand", "Design Name", "Size", "Color",
     "Vendor", "Customer", "Cost (USD)",
     "Backing", "Piping", "Closure Type", "Fill Type", "Mill Ref",
     "Pack Type", "Coating", "Mount Type",
-    "Description", "Created Date"
+    "Created Date"
   ];
   // QR column is sized as a known, fixed square (~103px) so the image can
   // be centered inside it precisely, rather than left anchored top-left.
@@ -4583,6 +4604,9 @@ async function exportItemMaster() {
   });
 
   sheet.getRow(1).height = 42;
+  const lastColLetter = String.fromCharCode(64 + headers.length); // headers.length = 21 -> "U"
+  sheet.mergeCells("A1:" + lastColLetter + "1");
+  sheet.getCell("A1").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF00112C" } };
   const logoBase64 = getLogoBase64ForExcel();
   if (logoBase64) {
     const logoImageId = workbook.addImage({ base64: logoBase64, extension: "png" });
@@ -4597,26 +4621,33 @@ async function exportItemMaster() {
   sheet.getRow(HEADER_ROW).eachCell(function(cell) {
     cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
     cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF16324F" } };
+    cell.alignment = { horizontal: "center", vertical: "middle" };
   });
+
+  const THIN_BORDER = { style: "thin" };
 
   for (let i = 0; i < items.length; i++) {
     const it = items[i];
     const rowIdx = i + 3;
     sheet.getRow(rowIdx).values = [
-      "", it.itemNumber, it.designNumber, it.category, it.brand, it.designName, it.size, it.color,
+      "", it.itemNumber, it.description, it.designNumber, it.category, it.brand, it.designName, it.size, it.color,
       it.vendor, it.customer, it.cost,
       it.backing, it.piping, it.closureType, it.fillType, it.millRef,
       it.packType, it.coating, it.mountType,
-      it.description, it.createdDate
+      it.createdDate
     ];
     sheet.getRow(rowIdx).height = QR_ROW_HEIGHT_POINTS;
+    sheet.getRow(rowIdx).eachCell({ includeEmpty: true }, function(cell) {
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.border = { top: THIN_BORDER, bottom: THIN_BORDER, left: THIN_BORDER, right: THIN_BORDER };
+    });
 
     try {
       // Generate at a high pixel density so the code stays crisp even when
       // zoomed in Excel or printed, independent of its smaller display size.
-      const qrDataUrl = await window.QRCode.toDataURL(it.itemNumber, { width: 400, margin: 1 });
+      const qrDataUrl = generateQRDataURL(it.itemNumber, 20, 20);
       const base64 = qrDataUrl.split(",")[1];
-      const imageId = workbook.addImage({ base64: base64, extension: "png" });
+      const imageId = workbook.addImage({ base64: base64, extension: "gif" });
       sheet.addImage(imageId, {
         tl: { col: QR_CENTER_OFFSET, row: (rowIdx - 1) + QR_CENTER_OFFSET },
         ext: { width: QR_IMAGE_PX, height: QR_IMAGE_PX }
@@ -6604,16 +6635,23 @@ function ensureXLSXLibLoaded() {
 }
 
 function ensureQRCodeLibLoaded() {
-  if (typeof window.QRCode !== "undefined") return Promise.resolve();
+  if (typeof window.qrcode !== "undefined") return Promise.resolve();
   if (qrCodeLibLoadPromise) return qrCodeLibLoadPromise;
   qrCodeLibLoadPromise = new Promise(function(resolve, reject) {
     const script = document.createElement("script");
-    script.src = "https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js";
+    script.src = "https://cdn.jsdelivr.net/npm/qrcode-generator@2.0.4/dist/qrcode.js";
     script.onload = function() { resolve(); };
     script.onerror = function() { reject(new Error("Could not load QR-generation library")); };
     document.head.appendChild(script);
   });
   return qrCodeLibLoadPromise;
+}
+
+function generateQRDataURL(text, cellSize, margin) {
+  const qr = window.qrcode(0, "M");
+  qr.addData(text);
+  qr.make();
+  return qr.createDataURL(cellSize || 10, margin != null ? margin : 8);
 }
 
 let currentQRCodeItemNumber = null;
@@ -6630,12 +6668,28 @@ async function showQRCodeForItem(itemNumber) {
   document.getElementById("qr-code-item-label").textContent = itemNumber;
   const canvas = document.getElementById("qr-code-canvas");
   try {
-    await window.QRCode.toCanvas(canvas, itemNumber, { width: 240, margin: 2 });
+    const qrDataUrl = generateQRDataURL(itemNumber, 10, 8);
+    await drawDataURLToCanvas(qrDataUrl, canvas);
   } catch (e) {
     showToast("Could not generate that QR code.", "error");
     return;
   }
   document.getElementById("qr-code-overlay").classList.add("show");
+}
+
+function drawDataURLToCanvas(dataUrl, canvas) {
+  return new Promise(function(resolve, reject) {
+    const img = new Image();
+    img.onload = function() {
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0);
+      resolve();
+    };
+    img.onerror = function() { reject(new Error("Could not render QR image")); };
+    img.src = dataUrl;
+  });
 }
 
 function closeQRCodeModal() {
@@ -8632,14 +8686,8 @@ function attrSafe(str) {
 // Tabs
 // ---------------------------------------------------------------
 function logoJumpToCalculator() {
-  const relevantScreens = [
-    "screen-meeting-detail", "screen-new-meeting", "screen-meetings-home",
-    "screen-sourcing-detail", "screen-new-sourcing", "screen-sourcing-home",
-    "screen-gallery", "screen-albums", "screen-photo-picker"
-  ];
-  const activeScreen = document.querySelector(".screen.active");
-  if (!activeScreen || relevantScreens.indexOf(activeScreen.id) === -1) return;
-
+  // Always routes home to the Calculator, from anywhere in the app,
+  // no exceptions -- kept simple for now, can be tuned later.
   gallerySelectMode = false;
   selectedPhotoIndices = new Set();
   document.getElementById("tabbar").style.display = "flex";
