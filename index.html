@@ -1913,7 +1913,7 @@
       <div class="field-hint" id="saved-quote-scan-status" style="margin-top:-4px; margin-bottom:8px;"></div>
       <div class="field-row" style="gap:8px; margin-bottom:10px;">
         <button type="button" class="scan-btn" style="flex:1;" onclick="downloadSupplierQuoteTemplate()">Download Factory Template</button>
-        <button type="button" class="scan-btn" style="flex:1;" onclick="triggerSupplierQuoteBulkUpload()">Bulk Upload Factory Quotes</button>
+        <button type="button" class="scan-btn" style="flex:1;" onclick="triggerSupplierQuoteBulkUpload()">Bulk Upload Quotes</button>
       </div>
       <input type="file" id="supplier-quote-bulk-input" accept=".xlsx,.xls" style="display:none;" onchange="handleSupplierQuoteBulkUpload(event)">
       <div class="settings-panel" id="sort-filter-panel">
@@ -5373,28 +5373,22 @@ async function downloadSupplierQuoteTemplate() {
 
   const workbook = new window.ExcelJS.Workbook();
 
-  // Reference sheet for the Curtain Type dropdown -- add rows here to expand it.
+  // Reference sheet for the two dropdowns -- add rows here to expand either.
   const listsSheet = workbook.addWorksheet("Lists");
-  const curtainTypes = ["BLACKOUT", "ROOM DARKENING", "NO COATING"];
-  listsSheet.getRow(1).values = ["curtainType"];
-  curtainTypes.forEach(function(val, rowIdx) {
-    listsSheet.getCell("A" + (rowIdx + 2)).value = val;
-  });
+  const categories = ["FABRIC", "CUSHION", "CURTAIN", "FINISHED GOODS"];
+  const backingOptions = ["BLACKOUT", "ROOM DARKENING", "NO COATING"];
+  listsSheet.getRow(1).values = ["category", "backing"];
+  categories.forEach(function(val, rowIdx) { listsSheet.getCell("A" + (rowIdx + 2)).value = val; });
+  backingOptions.forEach(function(val, rowIdx) { listsSheet.getCell("B" + (rowIdx + 2)).value = val; });
   listsSheet.state = "visible";
 
-  const headers = [
-    "Factory / Supplier Name", "Supplier Item #", "Fabric Cost (USD/m)", "Fabric Width (cm)",
-    "Customer", "Curtain Type",
-    "Factory Address", "Contact Person", "Email Address", "WeChat ID", "Phone #",
-    "Notes"
-  ];
   const sheet = workbook.addWorksheet("Supplier Quote Template");
-  headers.forEach(function(h, i) {
-    sheet.getColumn(i + 1).width = (h === "Notes" || h === "Factory Address") ? 32 : 22;
-  });
+  const COL_COUNT = 6; // A..F: Item #, Category, Fabric Cost, Fabric Width, Fabric GSM, Backing/Coating
+  [14, 16, 18, 18, 14, 20].forEach(function(w, i) { sheet.getColumn(i + 1).width = w; });
 
+  // Row 1: logo banner
   sheet.getRow(1).height = 42;
-  const lastColLetter = String.fromCharCode(64 + headers.length);
+  const lastColLetter = String.fromCharCode(64 + COL_COUNT);
   sheet.mergeCells("A1:" + lastColLetter + "1");
   sheet.getCell("A1").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF00112C" } };
   if (SUPPLIER_QUOTE_TEMPLATE_BANNER_BASE64) {
@@ -5405,30 +5399,50 @@ async function downloadSupplierQuoteTemplate() {
     });
   }
 
-  sheet.getRow(2).values = headers;
-  sheet.getRow(2).eachCell(function(cell) {
+  // Rows 2-7: one-time factory info block -- label in column A, value merged across B:F.
+  const factoryFields = [
+    ["Factory / Supplier Name", "Hangzhou Enyu Import & Export Co., LTD"],
+    ["Factory Address", "No. 88 Textile Road, Hangzhou, Zhejiang, China"],
+    ["Contact Person", "Li Wei"],
+    ["Email Address", "liwei@enyutextiles.com"],
+    ["WeChat ID", "enyu_liwei"],
+    ["Phone #", "+86 138 0000 0000"]
+  ];
+  factoryFields.forEach(function(pair, idx) {
+    const r = idx + 2;
+    const labelCell = sheet.getCell("A" + r);
+    labelCell.value = pair[0];
+    labelCell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    labelCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF16324F" } };
+    labelCell.alignment = { horizontal: "right", vertical: "middle" };
+    sheet.mergeCells("B" + r + ":" + lastColLetter + r);
+    const valueCell = sheet.getCell("B" + r);
+    valueCell.value = pair[1];
+    valueCell.alignment = { horizontal: "center", vertical: "middle" };
+  });
+
+  // Row 8: blank spacer between the factory block and the item table.
+  sheet.getRow(8).height = 10;
+
+  // Row 9: item table headers.
+  const itemHeaders = ["Supplier Item #", "Category", "Fabric Cost (USD/m)", "Fabric Width (cm)", "Fabric GSM", "Fabric Backing/Coating"];
+  sheet.getRow(9).values = itemHeaders;
+  sheet.getRow(9).eachCell(function(cell) {
     cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
     cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF16324F" } };
     cell.alignment = { horizontal: "center", vertical: "middle" };
   });
 
-  sheet.getRow(3).values = [
-    "Hangzhou Enyu Import & Export Co., LTD", "YH2024A-BLUE", "2.50", "305",
-    "Walmart Canada", "BLACKOUT",
-    "No. 88 Textile Road, Hangzhou, Zhejiang, China", "Li Wei", "liwei@enyutextiles.com", "enyu_liwei", "+86 138 0000 0000",
-    ""
-  ];
+  // Row 10: one example item row.
+  sheet.getRow(10).values = ["YH2033", "CURTAIN", "3.70", "305", "290", "BLACKOUT"];
 
-  // Curtain Type dropdown, column F -- generous row range for future rows.
-  for (let row = 3; row <= 500; row++) {
-    sheet.getCell("F" + row).dataValidation = {
-      type: "list",
-      allowBlank: true,
-      formulae: ["Lists!$A$2:$A$60"]
-    };
+  // Category dropdown (col B) and Backing/Coating dropdown (col F), generous row range.
+  for (let row = 10; row <= 500; row++) {
+    sheet.getCell("B" + row).dataValidation = { type: "list", allowBlank: true, formulae: ["Lists!$A$2:$A$60"] };
+    sheet.getCell("F" + row).dataValidation = { type: "list", allowBlank: true, formulae: ["Lists!$B$2:$B$60"] };
   }
 
-  sheet.views = [{ state: "frozen", ySplit: 2 }];
+  sheet.views = [{ state: "frozen", ySplit: 9 }];
 
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
@@ -5470,10 +5484,25 @@ async function handleSupplierQuoteBulkUpload(event) {
 
   const sheetName = wb.SheetNames.find(function(n) { return n !== "Lists"; }) || wb.SheetNames[0];
   const rows = window.XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, defval: "" });
-  const dataRows = rows.slice(2).filter(function(r) { return r.some(function(c) { return String(c).trim() !== ""; }); });
 
+  // Rows 2-7 (index 1-6): one-time factory info block, label in col A, value in col B.
+  const getFactoryField = function(rowIdx) { return String((rows[rowIdx] && rows[rowIdx][1]) || "").trim(); };
+  const vendor = getFactoryField(1);
+  const address = getFactoryField(2);
+  const contactName = getFactoryField(3);
+  const email = getFactoryField(4);
+  const wechat = getFactoryField(5);
+  const phone = getFactoryField(6);
+
+  if (!vendor) {
+    showToast("No Factory / Supplier Name found in the header block.", "error");
+    return;
+  }
+
+  // Row 9 (index 8) is the item table header; item rows start at row 10 (index 9).
+  const dataRows = rows.slice(9).filter(function(r) { return r.some(function(c) { return String(c).trim() !== ""; }); });
   if (dataRows.length === 0) {
-    showToast("No data rows found in that file.", "error");
+    showToast("No item rows found in that file.", "error");
     return;
   }
 
@@ -5488,22 +5517,23 @@ async function handleSupplierQuoteBulkUpload(event) {
   let createdCount = 0;
   let skippedDuplicate = 0;
   let skippedInvalid = 0;
+  let skippedFinishedGoods = 0;
 
   for (const row of dataRows) {
-    const vendor = String(row[0] || "").trim();
-    const item = String(row[1] || "").trim();
+    const item = String(row[0] || "").trim();
+    const categoryRaw = String(row[1] || "").trim().toUpperCase();
+    const category = categoryRaw || "CURTAIN"; // matches today's curtain-only behavior when left blank
     const fabricCost = parseFloat(row[2]);
     const fabricWidth = parseFloat(row[3]);
-    const customer = String(row[4] || "").trim();
-    const curtainType = String(row[5] || "").trim().toUpperCase();
-    const address = String(row[6] || "").trim();
-    const contactName = String(row[7] || "").trim();
-    const email = String(row[8] || "").trim();
-    const wechat = String(row[9] || "").trim();
-    const phone = String(row[10] || "").trim();
-    const notes = String(row[11] || "").trim();
+    const fabricGSM = parseFloat(row[4]);
+    const backing = String(row[5] || "").trim().toUpperCase();
 
-    if (!vendor || !item || !(fabricCost > 0) || !(fabricWidth > 0)) {
+    if (category === "FINISHED GOODS") {
+      skippedFinishedGoods++;
+      continue;
+    }
+
+    if (!item || !(fabricCost > 0) || !(fabricWidth > 0)) {
       skippedInvalid++;
       continue;
     }
@@ -5514,28 +5544,37 @@ async function handleSupplierQuoteBulkUpload(event) {
       continue;
     }
 
-    const computedPrices = SIZE_DEFS.map(function(def) {
-      const r = computeSize(def.w, def.l, def.pair, fabricCost, fabricWidth, s);
-      return { label: def.label, pair: def.pair, usd: r.usd, landed: r.landed, sell: r.sell, msrp: r.msrp };
-    });
+    let computedPrices = null;
+    if (category === "CURTAIN") {
+      computedPrices = SIZE_DEFS.map(function(def) {
+        const r = computeSize(def.w, def.l, def.pair, fabricCost, fabricWidth, s);
+        return { label: def.label, pair: def.pair, usd: r.usd, landed: r.landed, sell: r.sell, msrp: r.msrp };
+      });
+    }
+    // FABRIC and CUSHION rows stay unpriced -- stored as reference data,
+    // matching how a manual quote behaves without a computed pricing basis.
 
     quotes.unshift({
       id: "q_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
-      category: "curtains",
+      category: category === "CUSHION" ? "cushions" : "curtains",
+      supplierCategory: category, // FABRIC / CUSHION / CURTAIN, kept distinct from the app's own curtains/cushions split
       vendor: vendor,
       item: item,
-      curtainType: curtainType,
-      notes: notes,
-      customer: customer,
+      curtainType: backing,
+      notes: "",
+      customer: "",
       photo: "",
       fabricPrice: fabricCost,
       fabricWidth: fabricWidth,
+      fabricGSM: (fabricGSM > 0) ? fabricGSM : null,
       prices: computedPrices,
       date: new Date().toLocaleDateString()
     });
     existingPairs.add(pairKey);
     createdCount++;
+  }
 
+  if (createdCount > 0) {
     if (contactName || email || phone || address || wechat) {
       await upsertSupplier(vendor, {
         source: "bulk",
@@ -5555,6 +5594,7 @@ async function handleSupplierQuoteBulkUpload(event) {
   let summary = createdCount + " quote" + (createdCount === 1 ? "" : "s") + " created.";
   if (skippedDuplicate > 0) summary += " " + skippedDuplicate + " skipped (already existed).";
   if (skippedInvalid > 0) summary += " " + skippedInvalid + " skipped (missing required fields).";
+  if (skippedFinishedGoods > 0) summary += " " + skippedFinishedGoods + " skipped (Finished Goods not supported yet).";
   showToast(summary, createdCount > 0 ? "success" : "error");
   renderLog();
 }
