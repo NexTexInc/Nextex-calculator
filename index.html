@@ -303,6 +303,8 @@
   }
   .meeting-status-badge.active { background: var(--pair-bg); color: var(--terracotta-dark); }
   .meeting-status-badge.finalized { background: #E4E9D8; color: var(--green); }
+  .meeting-status-badge.discontinued { background: rgba(166,92,70,0.15); color: var(--rust); }
+  .meeting-status-badge.draft { background: var(--border); color: var(--text-secondary); }
 
   .audio-record-btn {
     display: flex;
@@ -2414,7 +2416,7 @@
         </div>
       </div>
 
-      <div class="field">
+      <div class="field" id="item-design-choice-field">
         <label>Design</label>
         <div class="chip-group" id="item-design-choice-group">
           <button type="button" class="chip selected" data-choice="new" onclick="setItemDesignChoice('new')">New Design</button>
@@ -2435,6 +2437,15 @@
         <div class="field" style="flex:1;">
           <label>Design #</label>
           <div id="item-design-number-display" style="font-family:'Century Gothic'; font-weight:700; font-size:17px; color:var(--navy); padding:10px 0;"></div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Status</label>
+        <div class="chip-group" id="item-status-group">
+          <button type="button" class="chip selected" data-status="Active" onclick="setItemStatus('Active')">Active</button>
+          <button type="button" class="chip" data-status="Discontinued" onclick="setItemStatus('Discontinued')">Discontinued</button>
+          <button type="button" class="chip" data-status="Draft" onclick="setItemStatus('Draft')">Draft</button>
         </div>
       </div>
 
@@ -2509,7 +2520,7 @@
         <div id="item-description-preview" class="ref-box"></div>
       </div>
 
-      <button type="button" class="btn btn-save" onclick="saveItem()">Save Item</button>
+      <button type="button" class="btn btn-save" id="item-save-btn" onclick="saveItem()">Save Item</button>
     </div>
   </div>
 
@@ -4078,6 +4089,15 @@ let itemCreationDesignChoice = "new";
 let itemCreationPiping = "NO";
 let itemCreationPackType = "SINGLE";
 let itemCreationCategory = "curtains";
+let itemEditingId = null;
+let itemCreationStatus = "Active";
+
+function setItemStatus(status) {
+  itemCreationStatus = status;
+  document.querySelectorAll("#item-status-group .chip").forEach(function(b) {
+    b.classList.toggle("selected", b.getAttribute("data-status") === status);
+  });
+}
 let itemCreationManualMode = false;
 let screenBeforeItemCreation = "log";
 
@@ -4087,6 +4107,10 @@ async function openManualItemCreation() {
   itemCreationSourceQuote = null;
   itemCreationManualMode = true;
   itemCreationCategory = "curtains";
+  itemEditingId = null;
+  setItemStatus("Active");
+  document.getElementById("item-save-btn").textContent = "Save Item";
+  document.getElementById("item-design-choice-field").style.display = "block";
 
   const activeScreen = document.querySelector(".screen.active");
   if (activeScreen) screenBeforeItemCreation = activeScreen.id.replace("screen-", "");
@@ -4157,6 +4181,10 @@ async function openItemCreation(quoteId) {
   itemCreationSourceQuote = entry;
   itemCreationManualMode = false;
   itemCreationCategory = entry.category;
+  itemEditingId = null;
+  setItemStatus("Active");
+  document.getElementById("item-save-btn").textContent = "Save Item";
+  document.getElementById("item-design-choice-field").style.display = "block";
 
   const activeScreen = document.querySelector(".screen.active");
   if (activeScreen) screenBeforeItemCreation = activeScreen.id.replace("screen-", "");
@@ -4372,7 +4400,112 @@ function updateItemDescriptionPreview() {
   document.getElementById("item-description-preview").textContent = buildItemDescription() || "(fill in fields to preview)";
 }
 
+async function openItemEdit(itemId) {
+  document.getElementById("hamburger-drawer").classList.remove("show");
+  document.getElementById("hamburger-backdrop").classList.remove("show");
+  const items = await getItems();
+  const item = items.find(function(it) { return it.id === itemId; });
+  if (!item) {
+    showToast("Could not find that item.", "error");
+    return;
+  }
+
+  itemEditingId = itemId;
+  itemCreationSourceQuote = null;
+  itemCreationManualMode = true;
+  itemCreationCategory = item.category;
+
+  const activeScreen = document.querySelector(".screen.active");
+  if (activeScreen) screenBeforeItemCreation = activeScreen.id.replace("screen-", "");
+
+  // Item #, Design #, and Category are permanent once assigned -- hide the
+  // controls that would let them change, show them as fixed values instead.
+  document.getElementById("item-manual-category-field").style.display = "none";
+  document.getElementById("item-design-choice-field").style.display = "none";
+  document.getElementById("item-existing-design-field").style.display = "none";
+  document.getElementById("item-manual-fields").style.display = "block";
+  document.getElementById("item-size-quote-field").style.display = "none";
+
+  document.getElementById("item-number-display").textContent = item.itemNumber;
+  document.getElementById("item-design-number-display").textContent = item.designNumber;
+  document.getElementById("item-design-name-hint").textContent = "";
+
+  document.getElementById("item-manual-vendor").value = item.vendor || "";
+  document.getElementById("item-manual-customer").value = item.customer || "";
+  document.getElementById("item-manual-cost").value = item.cost != null ? item.cost : "";
+  document.getElementById("item-size-manual").value = item.size || "";
+  document.getElementById("item-brand").value = item.brand || "";
+  document.getElementById("item-design-name").value = item.designName || "";
+  document.getElementById("item-color").value = item.color || "";
+
+  const isCushion = item.category === "cushions";
+  document.getElementById("item-cushion-fields").style.display = isCushion ? "block" : "none";
+  document.getElementById("item-curtain-fields").style.display = isCushion ? "none" : "block";
+
+  if (isCushion) {
+    document.getElementById("item-backing").value = item.backing || "BACK TO BACK";
+    itemCreationPiping = item.piping || "NO";
+    document.querySelectorAll("#item-piping-group .chip").forEach(function(b) {
+      b.classList.toggle("selected", b.getAttribute("data-val") === itemCreationPiping);
+    });
+    document.getElementById("item-closure-type").value = item.closureType || "";
+    document.getElementById("item-fill-type").value = item.fillType || "";
+    document.getElementById("item-mill-ref").value = item.millRef || "";
+  } else {
+    itemCreationPackType = item.packType || "SINGLE";
+    document.querySelectorAll("#item-pack-type-group .chip").forEach(function(b) {
+      b.classList.toggle("selected", b.getAttribute("data-val") === itemCreationPackType);
+    });
+    document.getElementById("item-coating").value = item.coating || "";
+    document.getElementById("item-mount-type").value = item.mountType || "";
+  }
+
+  setItemStatus(item.status || "Active");
+  document.getElementById("item-save-btn").textContent = "Update Item";
+
+  document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
+  document.getElementById("screen-item-creation").classList.add("active");
+  document.getElementById("tabbar").style.display = "none";
+  updateItemDescriptionPreview();
+}
+
 async function saveItem() {
+  if (itemEditingId) {
+    const items = await getItems();
+    const existing = items.find(function(it) { return it.id === itemEditingId; });
+    if (!existing) {
+      showToast("Could not find that item to update.", "error");
+      return;
+    }
+    const category = existing.category; // locked, never changes on edit
+    existing.brand = document.getElementById("item-brand").value.trim().toUpperCase();
+    existing.designName = document.getElementById("item-design-name").value.trim().toUpperCase();
+    existing.size = getItemSizeValue();
+    existing.color = document.getElementById("item-color").value.trim().toUpperCase();
+    existing.vendor = document.getElementById("item-manual-vendor").value.trim();
+    existing.customer = document.getElementById("item-manual-customer").value.trim();
+    existing.cost = parseFloat(document.getElementById("item-manual-cost").value) || 0;
+    existing.status = itemCreationStatus;
+    if (category === "cushions") {
+      existing.backing = document.getElementById("item-backing").value;
+      existing.piping = itemCreationPiping;
+      existing.closureType = document.getElementById("item-closure-type").value.trim().toUpperCase();
+      existing.fillType = document.getElementById("item-fill-type").value.trim().toUpperCase();
+      existing.millRef = document.getElementById("item-mill-ref").value.trim().toUpperCase();
+    } else {
+      existing.packType = itemCreationPackType;
+      existing.coating = document.getElementById("item-coating").value.trim().toUpperCase();
+      existing.mountType = document.getElementById("item-mount-type").value.trim().toUpperCase();
+    }
+    existing.description = buildItemDescription();
+
+    await saveItems(items);
+    showToast("Item " + existing.itemNumber + " updated.", "success");
+    itemEditingId = null;
+    closeItemCreation();
+    return;
+  }
+
   if (!itemCreationSourceQuote && !itemCreationManualMode) return;
   const nextNum = await getNextItemNumber();
   if (!nextNum) {
@@ -4432,6 +4565,7 @@ async function saveItem() {
     quoteId: entry ? entry.id : null,
     photo: entry ? (entry.photo || "") : "",
     createdDate: new Date().toLocaleDateString(),
+    status: itemCreationStatus,
     // cushion-specific
     backing: category === "cushions" ? document.getElementById("item-backing").value : "",
     piping: category === "cushions" ? itemCreationPiping : "",
@@ -4525,16 +4659,22 @@ async function renderDatabaseHome() {
       '</div>';
     }).join("");
 
+    const statusVal = it.status || "Active";
+    const statusClass = statusVal === "Active" ? "active" : (statusVal === "Discontinued" ? "discontinued" : "draft");
+
     return '<div class="quote-row" id="' + rowId + '">' +
       '<div class="quote-main-line" style="padding:12px; cursor:pointer;" onclick="document.getElementById(\'' + rowId + '\').classList.toggle(\'open\')">' +
         '<span class="quote-chevron">&#9656;</span>' +
         '<div class="meeting-row-info">' +
-          '<div class="meeting-row-name">' + escapeHtml(it.itemNumber) + ' &middot; ' + escapeHtml(it.designNumber) + '</div>' +
+          '<div class="meeting-row-name">' + escapeHtml(it.itemNumber) + ' &middot; ' + escapeHtml(it.designNumber) +
+            ' <span class="meeting-status-badge ' + statusClass + '" style="margin-left:6px;">' + escapeHtml(statusVal) + '</span></div>' +
           '<div class="meeting-row-sub">' + escapeHtml(it.description || "") + '</div>' +
         '</div>' +
         '<button type="button" class="cq-back-btn" style="flex:none;" onclick="event.stopPropagation(); showQRCodeForItem(\'' + attrSafe(it.itemNumber) + '\')">QR Code</button>' +
       '</div>' +
-      '<div class="quote-detail" style="padding:0 12px 14px 12px;">' + detailRowsHtml + '</div>' +
+      '<div class="quote-detail" style="padding:0 12px 14px 12px;">' + detailRowsHtml +
+        '<button type="button" class="edit-quote-btn" onclick="event.stopPropagation(); openItemEdit(\'' + it.id + '\')">Edit this item</button>' +
+      '</div>' +
     '</div>';
   }).join("");
 }
@@ -4904,6 +5044,7 @@ async function handleBulkItemUpload(event) {
       quoteId: null,
       photo: "",
       createdDate: new Date().toLocaleDateString(),
+      status: "Active",
       backing: category === "cushions" ? backing : "",
       piping: category === "cushions" ? piping : "",
       closureType: category === "cushions" ? closureType : "",
