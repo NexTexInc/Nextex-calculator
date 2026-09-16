@@ -1369,6 +1369,7 @@
       <button type="button" class="hamburger-submenu-item" onclick="openManualItemCreation()">New Item</button>
       <button type="button" class="hamburger-submenu-item" onclick="openDatabaseHome()">All Items &#8594;</button>
       <button type="button" class="hamburger-submenu-item" onclick="exportItemMaster()">Export Item Master</button>
+      <button type="button" class="hamburger-submenu-item" onclick="openDeletedItemsScreen()">Deleted Items</button>
     </div>
   </div>
 
@@ -1440,6 +1441,19 @@
       <div class="field-row" style="gap:8px; margin-top:16px;">
         <button type="button" class="btn btn-save" style="flex:1;" onclick="downloadQRCode()">Download</button>
         <button type="button" class="btn btn-clear-partial" style="flex:1;" onclick="closeQRCodeModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="crop-overlay" class="qr-code-overlay" style="z-index:2000;">
+    <div class="qr-code-card" style="max-width:94vw; width:480px;" onclick="event.stopPropagation();">
+      <div class="qr-code-label" style="margin-bottom:10px;">Crop Photo</div>
+      <div style="max-height:60vh; overflow:hidden;">
+        <img id="crop-target-image" style="max-width:100%; display:block;">
+      </div>
+      <div class="field-row" style="gap:8px; margin-top:16px;">
+        <button type="button" class="btn btn-save" style="flex:1;" onclick="confirmCrop()">Use Photo</button>
+        <button type="button" class="btn btn-clear-partial" style="flex:1;" onclick="cancelCrop()">Cancel</button>
       </div>
     </div>
   </div>
@@ -2571,6 +2585,18 @@
       </div>
 
       <div id="database-items-list"></div>
+    </div>
+  </div>
+
+  <!-- DELETED ITEMS SCREEN -->
+  <div class="screen" id="screen-deleted-items">
+    <div class="content">
+      <div class="cq-back-header">
+        <button type="button" class="cq-back-btn" onclick="closeDeletedItemsScreen()">&#8592; Back</button>
+        <span class="section-label" style="margin:0;">Deleted Items</span>
+      </div>
+      <div class="field-hint" style="margin-bottom:10px;">Items removed from the Database. Restore any of these if they were removed by mistake.</div>
+      <div id="deleted-items-list"></div>
     </div>
   </div>
 
@@ -4074,6 +4100,15 @@ async function getItems() {
   try { return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
 }
 
+async function getDeletedItems() {
+  const raw = await storageGet("nextex_deleted_items");
+  try { return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
+}
+
+async function saveDeletedItems(list) {
+  await storageSet("nextex_deleted_items", JSON.stringify(list));
+}
+
 async function saveItems(list) {
   await storageSet("nextex_items", JSON.stringify(list));
 }
@@ -4114,6 +4149,56 @@ let itemCreationSourceQuote = null;
 let itemCreationDesignChoice = "new";
 let itemCreationPiping = "NO";
 let itemCreationPackType = "SINGLE";
+let cropperInstance = null;
+let cropOnConfirmCallback = null;
+
+async function openCropModal(dataUrl, onConfirm) {
+  try {
+    await ensureCropperLibLoaded();
+  } catch (e) {
+    showToast("Could not load the crop tool. Check your connection and try again.", "error");
+    onConfirm(dataUrl); // fall back to the uncropped photo rather than blocking the user entirely
+    return;
+  }
+  cropOnConfirmCallback = onConfirm;
+  const img = document.getElementById("crop-target-image");
+  img.src = dataUrl;
+  document.getElementById("crop-overlay").classList.add("show");
+
+  if (img.complete) {
+    startCropper(img);
+  } else {
+    img.onload = function() { startCropper(img); };
+  }
+}
+
+function startCropper(img) {
+  if (cropperInstance) { cropperInstance.destroy(); cropperInstance = null; }
+  cropperInstance = new window.Cropper(img, {
+    viewMode: 1,
+    autoCropArea: 0.9,
+    background: false
+  });
+}
+
+function confirmCrop() {
+  if (!cropperInstance) { cancelCrop(); return; }
+  const canvas = cropperInstance.getCroppedCanvas({ maxWidth: 1600, maxHeight: 1600 });
+  const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+  cropperInstance.destroy();
+  cropperInstance = null;
+  document.getElementById("crop-overlay").classList.remove("show");
+  const cb = cropOnConfirmCallback;
+  cropOnConfirmCallback = null;
+  if (cb) cb(dataUrl);
+}
+
+function cancelCrop() {
+  if (cropperInstance) { cropperInstance.destroy(); cropperInstance = null; }
+  document.getElementById("crop-overlay").classList.remove("show");
+  cropOnConfirmCallback = null;
+}
+
 let itemCreationCategory = "curtains";
 let itemEditingId = null;
 let itemCreationStatus = "Active";
@@ -4131,12 +4216,25 @@ function viewItemPhotoIfPresent(event) {
   if (itemPhotoDataUrl) openLightbox(itemPhotoDataUrl, event);
 }
 
+function readFileAsDataURL(file) {
+  return new Promise(function(resolve, reject) {
+    const reader = new FileReader();
+    reader.onload = function() { resolve(reader.result); };
+    reader.onerror = function() { reject(new Error("Could not read file")); };
+    reader.readAsDataURL(file);
+  });
+}
+
 async function handleItemPhotoSelected(event) {
   const file = event.target.files && event.target.files[0];
+  event.target.value = "";
   if (!file) return;
   try {
-    itemPhotoDataUrl = await compressImageFile(file, 1200, 0.85);
-    setItemPhotoPreview(itemPhotoDataUrl);
+    const rawDataUrl = await readFileAsDataURL(file);
+    await openCropModal(rawDataUrl, function(croppedDataUrl) {
+      itemPhotoDataUrl = croppedDataUrl;
+      setItemPhotoPreview(itemPhotoDataUrl);
+    });
   } catch (e) {
     showToast("Could not process that photo.", "error");
   }
@@ -4764,6 +4862,7 @@ async function renderDatabaseHome() {
       '<div class="quote-detail" style="padding:0 12px 14px 12px;">' + detailRowsHtml +
         '<button type="button" class="edit-quote-btn" style="border-color:var(--terracotta); color:var(--rust);" onclick="event.stopPropagation(); addItemToCustomerQuote(\'' + it.id + '\')">+ Add to Customer Quote</button>' +
         '<button type="button" class="edit-quote-btn" onclick="event.stopPropagation(); openItemEdit(\'' + it.id + '\')">Edit this item</button>' +
+        '<button type="button" class="edit-quote-btn" style="border-color:var(--rust); color:var(--rust); margin-top:8px;" onclick="event.stopPropagation(); confirmDeleteItem(\'' + it.id + '\')">Delete this item</button>' +
       '</div>' +
     '</div>';
   }).join("");
@@ -6835,6 +6934,26 @@ function ensureTesseractLoaded() {
 // ---------------------------------------------------------------
 let qrCodeLibLoadPromise = null;
 
+let cropperLibLoadPromise = null;
+
+function ensureCropperLibLoaded() {
+  if (typeof window.Cropper !== "undefined") return Promise.resolve();
+  if (cropperLibLoadPromise) return cropperLibLoadPromise;
+  cropperLibLoadPromise = new Promise(function(resolve, reject) {
+    const cssLink = document.createElement("link");
+    cssLink.rel = "stylesheet";
+    cssLink.href = "https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.css";
+    document.head.appendChild(cssLink);
+
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js";
+    script.onload = function() { resolve(); };
+    script.onerror = function() { reject(new Error("Could not load the crop tool")); };
+    document.head.appendChild(script);
+  });
+  return cropperLibLoadPromise;
+}
+
 let excelJSLibLoadPromise = null;
 
 function ensureExcelJSLibLoaded() {
@@ -7606,6 +7725,86 @@ async function processQuoteSelections(btn) {
   } else {
     showToast("No changes to the customer quote.");
   }
+}
+
+async function confirmDeleteItem(itemId) {
+  const items = await getItems();
+  const it = items.find(function(i) { return i.id === itemId; });
+  if (!it) return;
+  showConfirm("Delete " + it.itemNumber + "? It'll move to Deleted Items, where you can restore it if needed.", async function() {
+    await deleteItemById(itemId);
+  });
+}
+
+let screenBeforeDeletedItems = "calc";
+
+function openDeletedItemsScreen() {
+  document.getElementById("hamburger-drawer").classList.remove("show");
+  document.getElementById("hamburger-backdrop").classList.remove("show");
+  const activeScreen = document.querySelector(".screen.active");
+  if (activeScreen) screenBeforeDeletedItems = activeScreen.id.replace("screen-", "");
+
+  document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
+  document.getElementById("screen-deleted-items").classList.add("active");
+  document.getElementById("tabbar").style.display = "none";
+  renderDeletedItemsScreen();
+}
+
+function closeDeletedItemsScreen() {
+  document.getElementById("tabbar").style.display = "flex";
+  showScreen(screenBeforeDeletedItems);
+}
+
+async function renderDeletedItemsScreen() {
+  const deletedList = await getDeletedItems();
+  const container = document.getElementById("deleted-items-list");
+  if (deletedList.length === 0) {
+    container.innerHTML = '<div class="log-empty"><div class="icon">&#128193;</div>Nothing in Deleted Items.</div>';
+    return;
+  }
+  const sorted = deletedList.slice().sort(function(a, b) { return (b.deletedDate || "").localeCompare(a.deletedDate || ""); });
+  container.innerHTML = sorted.map(function(it) {
+    return '<div class="meeting-row">' +
+      '<div class="meeting-row-info">' +
+        '<div class="meeting-row-name">' + escapeHtml(it.itemNumber) + ' &middot; ' + escapeHtml(it.designNumber) + '</div>' +
+        '<div class="meeting-row-sub">' + escapeHtml(it.description || "") + '</div>' +
+        '<div class="meeting-row-sub" style="font-style:italic;">Deleted ' + escapeHtml(it.deletedDate || "") + '</div>' +
+      '</div>' +
+      '<button type="button" class="scan-btn" style="flex:none;" onclick="restoreItem(\'' + it.id + '\')">Restore</button>' +
+    '</div>';
+  }).join("");
+}
+
+async function restoreItem(itemId) {
+  const deletedList = await getDeletedItems();
+  const it = deletedList.find(function(i) { return i.id === itemId; });
+  if (!it) return;
+  const remaining = deletedList.filter(function(i) { return i.id !== itemId; });
+  await saveDeletedItems(remaining);
+
+  delete it.deletedDate;
+  const items = await getItems();
+  items.push(it);
+  await saveItems(items);
+
+  showToast(it.itemNumber + " restored.", "success");
+  renderDeletedItemsScreen();
+}
+
+async function deleteItemById(itemId) {
+  const items = await getItems();
+  const it = items.find(function(i) { return i.id === itemId; });
+  if (!it) return;
+  const filtered = items.filter(function(i) { return i.id !== itemId; });
+  await saveItems(filtered);
+
+  const deletedList = await getDeletedItems();
+  it.deletedDate = new Date().toLocaleDateString();
+  deletedList.push(it);
+  await saveDeletedItems(deletedList);
+
+  showToast("Item deleted \u2014 moved to Deleted Items.", "success");
+  renderDatabaseHome();
 }
 
 async function addItemToCustomerQuote(itemId) {
