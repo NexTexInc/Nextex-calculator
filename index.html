@@ -2758,14 +2758,31 @@ async function storageGet(key) {
 async function storageSet(key, value) {
   if (HAS_CLAUDE_STORAGE) {
     try {
-      await window.storage.set(key, value, false);
-      return true;
+      const result = await window.storage.set(key, value, false);
+      return result !== null && result !== undefined;
     } catch (e) {
       return false;
     }
   }
   try {
     window.localStorage.setItem(key, value);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function storageDelete(key) {
+  if (HAS_CLAUDE_STORAGE) {
+    try {
+      await window.storage.delete(key, false);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+  try {
+    window.localStorage.removeItem(key);
     return true;
   } catch (e) {
     return false;
@@ -3770,9 +3787,7 @@ async function renderMeetingDetail(meetingId) {
 
   // Quotes and photos tagged to this meeting -- empty until quotes start
   // getting tagged, but this query is real and will populate automatically.
-  const rawQuotes = await storageGet("nextex_quotes");
-  let quotes = [];
-  try { quotes = rawQuotes ? JSON.parse(rawQuotes) : []; } catch (e) { quotes = []; }
+  let quotes = await getQuotes();
   const meetingQuotes = quotes.filter(function(q) { return q.meetingId === meetingId; });
 
   const quotesContainer = document.getElementById("meeting-detail-quotes");
@@ -3856,9 +3871,7 @@ async function downloadMeetingSummary() {
   const meeting = meetings.find(function(m) { return m.id === currentMeetingDetailId; });
   if (!meeting) return;
 
-  const rawQuotes = await storageGet("nextex_quotes");
-  let quotes = [];
-  try { quotes = rawQuotes ? JSON.parse(rawQuotes) : []; } catch (e) { quotes = []; }
+  let quotes = await getQuotes();
   const meetingQuotes = quotes.filter(function(q) { return q.meetingId === meeting.id; });
   const meetingCartItems = customerCart.filter(function(c) { return c.meetingId === meeting.id; });
   const meetingSessionPhotosForDownload = (await getSessionPhotos()).filter(function(p) { return p.meetingId === meeting.id; });
@@ -3921,13 +3934,158 @@ async function downloadMeetingSummary() {
 // Meeting or Sourcing session, with no quote required. Tagged to
 // exactly one of meetingId / sourcingId.
 // ---------------------------------------------------------------
+// Photos are stored one-per-key (nextex_photo_<id>) plus a lightweight
+// index (nextex_session_photos_index) holding just id/meetingId/sourcingId/
+// albumIds/timestamp -- no photo data. This is so no single storage key
+// ever has to hold every photo in the app at once, which is what let one
+// key's cumulative size threaten every feature's ability to save. Every
+// caller still works with the same full-object array shape as before;
+// only the storage underneath these two functions changed.
 async function getSessionPhotos() {
-  const raw = await storageGet("nextex_session_photos");
-  try { return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
+  // One-time migration: if the old single-blob format is still present,
+  // split it into the new structure, then remove the old blob.
+  const oldRaw = await storageGet("nextex_session_photos");
+  if (oldRaw !== null) {
+    let oldList = [];
+    try { oldList = JSON.parse(oldRaw) || []; } catch (e) { oldList = []; }
+    await saveSessionPhotos(oldList);
+    await storageDelete("nextex_session_photos");
+  }
+
+  const indexRaw = await storageGet("nextex_session_photos_index");
+  let index = [];
+  try { index = indexRaw ? JSON.parse(indexRaw) : []; } catch (e) { index = []; }
+
+  const result = [];
+  for (const entry of index) {
+    const photoData = await storageGet("nextex_photo_" + entry.id);
+    result.push(Object.assign({}, entry, { photo: photoData || "" }));
+  }
+  return result;
 }
 
 async function saveSessionPhotos(list) {
-  await storageSet("nextex_session_photos", JSON.stringify(list));
+  const indexRaw = await storageGet("nextex_session_photos_index");
+  let oldIndex = [];
+  try { oldIndex = indexRaw ? JSON.parse(indexRaw) : []; } catch (e) { oldIndex = []; }
+  const oldIds = new Set(oldIndex.map(function(e) { return e.id; }));
+  const newIds = new Set(list.map(function(p) { return p.id; }));
+
+  // Remove per-photo keys for anything no longer in the list, so deleted
+  // photos don't leak storage.
+  for (const entry of oldIndex) {
+    if (!newIds.has(entry.id)) {
+      await storageDelete("nextex_photo_" + entry.id);
+    }
+  }
+
+  // Only write photo data for genuinely new entries -- an existing photo's
+  // data is never mutated in place once saved, so re-writing every photo
+  // on every save would be pure waste. A photo whose write fails is left
+  // out of the index entirely, so a failed save can't leave behind a
+  // "ghost" entry that claims to exist but has no actual image data.
+  let allOk = true;
+  const successfulList = [];
+  for (const p of list) {
+    if (oldIds.has(p.id)) {
+      successfulList.push(p);
+      continue;
+    }
+    const ok = await storageSet("nextex_photo_" + p.id, p.photo || "");
+    if (ok) {
+      successfulList.push(p);
+    } else {
+      allOk = false;
+    }
+  }
+
+  const index = successfulList.map(function(p) {
+    return { id: p.id, meetingId: p.meetingId, sourcingId: p.sourcingId, albumIds: p.albumIds, timestamp: p.timestamp };
+  });
+  const indexOk = await storageSet("nextex_session_photos_index", JSON.stringify(index));
+  return allOk && indexOk;
+}
+
+// Quotes are stored the same way session photos are -- one-per-key for the
+// photo (nextex_quote_photo_<id>) plus a lightweight index
+// (nextex_quotes_index) holding every other field. Unlike a session photo,
+// a quote's photo CAN change on edit (Update Quote can replace or remove
+// it), so a cheap fingerprint (length + a slice of the string) is kept in
+// the index to detect a real change without re-reading or re-writing
+// unchanged photo data on every save.
+function photoFingerprint(photo) {
+  if (!photo) return "";
+  return photo.length + ":" + photo.slice(0, 24);
+}
+
+async function getQuotes() {
+  // One-time migration: if the old single-blob format is still present,
+  // split it into the new structure, then remove the old blob.
+  const oldRaw = await storageGet("nextex_quotes");
+  if (oldRaw !== null) {
+    let oldList = [];
+    try { oldList = JSON.parse(oldRaw) || []; } catch (e) { oldList = []; }
+    await saveQuotes(oldList);
+    await storageDelete("nextex_quotes");
+  }
+
+  const indexRaw = await storageGet("nextex_quotes_index");
+  let index = [];
+  try { index = indexRaw ? JSON.parse(indexRaw) : []; } catch (e) { index = []; }
+
+  const result = [];
+  for (const entry of index) {
+    const rest = Object.assign({}, entry);
+    delete rest._photoFp;
+    const photoData = await storageGet("nextex_quote_photo_" + entry.id);
+    rest.photo = photoData || "";
+    result.push(rest);
+  }
+  return result;
+}
+
+async function saveQuotes(list) {
+  const indexRaw = await storageGet("nextex_quotes_index");
+  let oldIndex = [];
+  try { oldIndex = indexRaw ? JSON.parse(indexRaw) : []; } catch (e) { oldIndex = []; }
+  const oldFpById = {};
+  oldIndex.forEach(function(e) { oldFpById[e.id] = e._photoFp || ""; });
+  const newIds = new Set(list.map(function(p) { return p.id; }));
+
+  // Remove per-quote photo keys for any quote no longer in the list, so
+  // deleted quotes don't leak storage.
+  for (const entry of oldIndex) {
+    if (!newIds.has(entry.id)) {
+      await storageDelete("nextex_quote_photo_" + entry.id);
+    }
+  }
+
+  let allOk = true;
+  const successfulList = [];
+  for (const p of list) {
+    const newFp = photoFingerprint(p.photo);
+    const oldFp = oldFpById.hasOwnProperty(p.id) ? oldFpById[p.id] : undefined;
+    if (oldFp === newFp) {
+      // Photo unchanged (including "both empty") -- skip re-writing it.
+      successfulList.push(p);
+      continue;
+    }
+    const ok = await storageSet("nextex_quote_photo_" + p.id, p.photo || "");
+    if (ok) {
+      successfulList.push(p);
+    } else {
+      allOk = false; // leave this one out of the index -- no ghost entries
+    }
+  }
+
+  const index = successfulList.map(function(p) {
+    const rest = Object.assign({}, p);
+    delete rest.photo;
+    rest._photoFp = photoFingerprint(p.photo);
+    return rest;
+  });
+  const indexOk = await storageSet("nextex_quotes_index", JSON.stringify(index));
+  return allOk && indexOk;
 }
 
 function triggerSessionPhotoCamera(context) {
@@ -3956,7 +4114,11 @@ async function handleSessionPhotoSelected(event, context) {
       timestamp: new Date().toISOString()
     };
     list.push(entry);
-    await saveSessionPhotos(list);
+    const savedOk = await saveSessionPhotos(list);
+    if (!savedOk) {
+      showToast("Could not save that photo \u2014 storage may be full.", "error");
+      return;
+    }
     showToast("Photo added.", "success");
     if (context === "meeting") renderMeetingDetail(id);
     else renderSourcingDetail(id);
@@ -4033,9 +4195,7 @@ async function populatePhotoPickerAlbumFilter() {
 }
 
 async function getPickerEligiblePhotos() {
-  const rawQuotes = await storageGet("nextex_quotes");
-  let quotes = [];
-  try { quotes = rawQuotes ? JSON.parse(rawQuotes) : []; } catch (e) { quotes = []; }
+  let quotes = await getQuotes();
   const sessionPhotos = await getSessionPhotos();
 
   const fromQuotes = quotes.filter(function(q) { return q.photo; }).map(function(q) {
@@ -4094,7 +4254,11 @@ async function selectPickedPhoto(index) {
       sourcingId: photoPickerTarget === "sourcing" ? photoPickerEntityId : null,
       timestamp: new Date().toISOString()
     });
-    await saveSessionPhotos(list);
+    const savedOk2 = await saveSessionPhotos(list);
+    if (!savedOk2) {
+      showToast("Could not save that photo \u2014 storage may be full.", "error");
+      return;
+    }
     showToast("Photo added.", "success");
     closePhotoPicker();
     if (photoPickerTarget === "meeting") renderMeetingDetail(photoPickerEntityId);
@@ -4369,9 +4533,7 @@ function setItemCreationCategory(cat) {
 }
 
 async function openItemCreation(quoteId) {
-  const raw = await storageGet("nextex_quotes");
-  let quotes = [];
-  try { quotes = raw ? JSON.parse(raw) : []; } catch (e) { quotes = []; }
+  let quotes = await getQuotes();
   const entry = quotes.find(function(q) { return q.id === quoteId; });
   if (!entry) {
     showToast("Could not find that quote.", "error");
@@ -5045,9 +5207,7 @@ async function exportSavedQuotesWithQR() {
     return;
   }
 
-  const raw = await storageGet("nextex_quotes");
-  let quotes = [];
-  try { quotes = raw ? JSON.parse(raw) : []; } catch (e) { quotes = []; }
+  let quotes = await getQuotes();
   if (quotes.length === 0) {
     showToast("No saved quotes yet.", "error");
     return;
@@ -5188,9 +5348,7 @@ async function exportStickerSheetPDF() {
     return;
   }
 
-  const raw = await storageGet("nextex_quotes");
-  let quotes = [];
-  try { quotes = raw ? JSON.parse(raw) : []; } catch (e) { quotes = []; }
+  let quotes = await getQuotes();
   quotes = quotes.filter(function(q) { return q.item; });
   if (quotes.length === 0) {
     showToast("No saved quotes with an item # yet.", "error");
@@ -5506,9 +5664,7 @@ async function handleSupplierQuoteBulkUpload(event) {
     return;
   }
 
-  const raw = await storageGet("nextex_quotes");
-  let quotes = [];
-  try { quotes = raw ? JSON.parse(raw) : []; } catch (e) { quotes = []; }
+  let quotes = await getQuotes();
   const existingPairs = new Set(quotes.map(function(q) {
     return (q.vendor || "").trim().toLowerCase() + "||" + (q.item || "").trim().toLowerCase();
   }));
@@ -5589,7 +5745,7 @@ async function handleSupplierQuoteBulkUpload(event) {
     }
   }
 
-  await storageSet("nextex_quotes", JSON.stringify(quotes));
+  await saveQuotes(quotes);
 
   let summary = createdCount + " quote" + (createdCount === 1 ? "" : "s") + " created.";
   if (skippedDuplicate > 0) summary += " " + skippedDuplicate + " skipped (already existed).";
@@ -5794,7 +5950,11 @@ async function handleGalleryUpload(event) {
       // skip a file that fails to process, keep going with the rest
     }
   }
-  await saveSessionPhotos(list);
+  const savedOk3 = await saveSessionPhotos(list);
+  if (!savedOk3) {
+    showToast("Could not save " + (addedCount === 1 ? "that photo" : "those photos") + " \u2014 storage may be full.", "error");
+    return;
+  }
   showToast(addedCount + (addedCount === 1 ? " photo" : " photos") + " uploaded.", "success");
   renderPhotoGallery();
 }
@@ -5815,7 +5975,11 @@ async function handleGalleryCameraCapture(event) {
       albumIds: currentGalleryAlbumFilter ? [currentGalleryAlbumFilter] : [],
       timestamp: new Date().toISOString()
     });
-    await saveSessionPhotos(list);
+    const savedOk4 = await saveSessionPhotos(list);
+    if (!savedOk4) {
+      showToast("Could not save that photo \u2014 storage may be full.", "error");
+      return;
+    }
     showToast("Photo added.", "success");
     renderPhotoGallery();
   } catch (e) {
@@ -6252,9 +6416,7 @@ async function renderSourcingDetail(sourcingId) {
   const finalizeBtn = document.getElementById("sourcing-finalize-btn");
   finalizeBtn.textContent = sourcing.status === "active" ? "Finalize sourcing" : "Reopen sourcing";
 
-  const rawQuotes = await storageGet("nextex_quotes");
-  let quotes = [];
-  try { quotes = rawQuotes ? JSON.parse(rawQuotes) : []; } catch (e) { quotes = []; }
+  let quotes = await getQuotes();
   const sourcingQuotes = quotes.filter(function(q) { return q.sourcingId === sourcingId; });
 
   const quotesContainer = document.getElementById("sourcing-detail-quotes");
@@ -6341,9 +6503,7 @@ async function downloadSourcingSummary() {
   const sourcing = list.find(function(s) { return s.id === currentSourcingDetailId; });
   if (!sourcing) return;
 
-  const rawQuotes = await storageGet("nextex_quotes");
-  let quotes = [];
-  try { quotes = rawQuotes ? JSON.parse(rawQuotes) : []; } catch (e) { quotes = []; }
+  let quotes = await getQuotes();
   const sourcingQuotes = quotes.filter(function(q) { return q.sourcingId === sourcing.id; });
 
   const rawSuppliers = await storageGet("nextex_suppliers");
@@ -6421,10 +6581,27 @@ async function saveAlbums(albums) {
   await storageSet("nextex_albums", JSON.stringify(albums));
 }
 
-async function stripAlbumIdFromStore(storageKey, albumId) {
+// Routes to the correct getter/setter for a given storage key -- quotes
+// and session photos each have their own split-storage functions now;
+// everything else (e.g. suppliers) still reads/writes its single blob
+// directly. Centralizing this here means stripAlbumIdFromStore and the
+// photo-management helpers below can't silently bypass the split storage
+// by reading the old key name directly, the way they did before this existed.
+async function getRecordsForStorageKey(storageKey) {
+  if (storageKey === "nextex_session_photos") return await getSessionPhotos();
+  if (storageKey === "nextex_quotes") return await getQuotes();
   const raw = await storageGet(storageKey);
-  let list = [];
-  try { list = raw ? JSON.parse(raw) : []; } catch (e) { list = []; }
+  try { return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
+}
+
+async function saveRecordsForStorageKey(storageKey, list) {
+  if (storageKey === "nextex_session_photos") return await saveSessionPhotos(list);
+  if (storageKey === "nextex_quotes") return await saveQuotes(list);
+  return await storageSet(storageKey, JSON.stringify(list));
+}
+
+async function stripAlbumIdFromStore(storageKey, albumId) {
+  const list = await getRecordsForStorageKey(storageKey);
   let changed = false;
   list.forEach(function(entry) {
     if (entry.albumIds && entry.albumIds.indexOf(albumId) !== -1) {
@@ -6432,7 +6609,7 @@ async function stripAlbumIdFromStore(storageKey, albumId) {
       changed = true;
     }
   });
-  if (changed) await storageSet(storageKey, JSON.stringify(list));
+  if (changed) await saveRecordsForStorageKey(storageKey, list);
 }
 
 async function deleteAlbum(albumId) {
@@ -6528,7 +6705,13 @@ async function handleCreateAlbumUpload(event) {
       // skip a file that fails to process, keep going with the rest
     }
   }
-  await saveSessionPhotos(list);
+  const savedOk5 = await saveSessionPhotos(list);
+  if (!savedOk5) {
+    showToast("Album \"" + name + "\" created, but the photos could not be saved \u2014 storage may be full.", "error");
+    cancelCreateAlbumFlow();
+    openAlbum(album.id);
+    return;
+  }
   showToast('Album "' + name + '" created with ' + addedCount + (addedCount === 1 ? " photo" : " photos") + ".", "success");
   cancelCreateAlbumFlow();
   openAlbum(album.id);
@@ -6554,14 +6737,12 @@ async function createAlbumFromExisting() {
 
 async function addPhotoRefToAlbum(sourceType, sourceId, albumId) {
   const storageKey = sourceType === "quote" ? "nextex_quotes" : (sourceType === "session" ? "nextex_session_photos" : "nextex_suppliers");
-  const raw = await storageGet(storageKey);
-  let list = [];
-  try { list = raw ? JSON.parse(raw) : []; } catch (e) { list = []; }
+  const list = await getRecordsForStorageKey(storageKey);
   const entry = list.find(function(e) { return e.id === sourceId; });
   if (!entry) return;
   if (!entry.albumIds) entry.albumIds = [];
   if (entry.albumIds.indexOf(albumId) === -1) entry.albumIds.push(albumId);
-  await storageSet(storageKey, JSON.stringify(list));
+  await saveRecordsForStorageKey(storageKey, list);
 }
 
 function photoStorageKey(sourceType) {
@@ -6570,20 +6751,16 @@ function photoStorageKey(sourceType) {
 
 async function removePhotoFromAlbum(sourceType, sourceId, albumId) {
   const storageKey = photoStorageKey(sourceType);
-  const raw = await storageGet(storageKey);
-  let list = [];
-  try { list = raw ? JSON.parse(raw) : []; } catch (e) { list = []; }
+  const list = await getRecordsForStorageKey(storageKey);
   const entry = list.find(function(e) { return e.id === sourceId; });
   if (!entry || !entry.albumIds) return;
   entry.albumIds = entry.albumIds.filter(function(id) { return id !== albumId; });
-  await storageSet(storageKey, JSON.stringify(list));
+  await saveRecordsForStorageKey(storageKey, list);
 }
 
 async function deletePhotoPermanently(sourceType, sourceId) {
   const storageKey = photoStorageKey(sourceType);
-  const raw = await storageGet(storageKey);
-  let list = [];
-  try { list = raw ? JSON.parse(raw) : []; } catch (e) { list = []; }
+  let list = await getRecordsForStorageKey(storageKey);
 
   if (sourceType === "session") {
     // Session photos are standalone entries -- delete the entry entirely.
@@ -6594,7 +6771,7 @@ async function deletePhotoPermanently(sourceType, sourceId) {
     const entry = list.find(function(e) { return e.id === sourceId; });
     if (entry) entry.photo = "";
   }
-  await storageSet(storageKey, JSON.stringify(list));
+  await saveRecordsForStorageKey(storageKey, list);
   if (storageKey === "nextex_suppliers") await refreshSupplierCache();
 }
 
@@ -6632,9 +6809,7 @@ async function renderAlbumsHome() {
     return;
   }
 
-  const rawQuotes = await storageGet("nextex_quotes");
-  let quotes = [];
-  try { quotes = rawQuotes ? JSON.parse(rawQuotes) : []; } catch (e) { quotes = []; }
+  let quotes = await getQuotes();
   const rawSuppliers = await storageGet("nextex_suppliers");
   let suppliers = [];
   try { suppliers = rawSuppliers ? JSON.parse(rawSuppliers) : []; } catch (e) { suppliers = []; }
@@ -6782,9 +6957,7 @@ async function renderPhotoGallery() {
   const grid = document.getElementById("photo-gallery-grid");
   const hintEl = document.querySelector("#screen-gallery .field-hint");
 
-  const rawQuotes = await storageGet("nextex_quotes");
-  let quotes = [];
-  try { quotes = rawQuotes ? JSON.parse(rawQuotes) : []; } catch (e) { quotes = []; }
+  let quotes = await getQuotes();
 
   const rawSuppliers = await storageGet("nextex_suppliers");
   let suppliers = [];
@@ -7840,9 +8013,7 @@ let editingQuoteId = null;
 
 async function saveQuote() {
   const s = getSettings();
-  const raw = await storageGet("nextex_quotes");
-  let list = [];
-  try { list = raw ? JSON.parse(raw) : []; } catch (e) { list = []; }
+  let list = await getQuotes();
 
   let fieldsFromForm;
 
@@ -7912,11 +8083,11 @@ async function saveQuote() {
       savedQuoteId = editingQuoteId;
       list[idx] = Object.assign({}, list[idx], fieldsFromForm);
     }
-    ok = await storageSet("nextex_quotes", JSON.stringify(list));
+    ok = await saveQuotes(list);
   } else {
     savedQuoteId = "q_" + Date.now();
     list.unshift(Object.assign({ id: savedQuoteId, date: new Date().toLocaleDateString() }, fieldsFromForm));
-    ok = await storageSet("nextex_quotes", JSON.stringify(list));
+    ok = await saveQuotes(list);
   }
 
   if (ok) {
@@ -7951,24 +8122,20 @@ async function saveQuote() {
 }
 
 async function tagQuoteToMeeting(quoteId, meetingId) {
-  const raw = await storageGet("nextex_quotes");
-  let list = [];
-  try { list = raw ? JSON.parse(raw) : []; } catch (e) { list = []; }
+  let list = await getQuotes();
   const entry = list.find(function(e) { return e.id === quoteId; });
   if (!entry) return;
   entry.meetingId = meetingId;
-  await storageSet("nextex_quotes", JSON.stringify(list));
+  await saveQuotes(list);
   showToast("Added to meeting.", "success");
 }
 
 async function tagQuoteToSourcing(quoteId, sourcingId) {
-  const raw = await storageGet("nextex_quotes");
-  let list = [];
-  try { list = raw ? JSON.parse(raw) : []; } catch (e) { list = []; }
+  let list = await getQuotes();
   const entry = list.find(function(e) { return e.id === quoteId; });
   if (!entry) return;
   entry.sourcingId = sourcingId;
-  await storageSet("nextex_quotes", JSON.stringify(list));
+  await saveQuotes(list);
   showToast("Added to sourcing.", "success");
 }
 
@@ -8033,9 +8200,7 @@ function clearAll() {
 // Edit a saved quote (load it back into the Calculator, update in place)
 // ---------------------------------------------------------------
 async function loadQuoteForEdit(id) {
-  const raw = await storageGet("nextex_quotes");
-  let list = [];
-  try { list = raw ? JSON.parse(raw) : []; } catch (e) { list = []; }
+  let list = await getQuotes();
   const entry = list.find(function(e) { return e.id === id; });
   if (!entry) {
     showToast("Could not find that quote.", "error");
@@ -8832,9 +8997,7 @@ function triggerCsvDownload(filenameBase, csvString) {
 }
 
 async function downloadSavedQuotesCsv() {
-  const raw = await storageGet("nextex_quotes");
-  let list = [];
-  try { list = raw ? JSON.parse(raw) : []; } catch (e) { list = []; }
+  let list = await getQuotes();
 
   const filtered = sortAndFilterQuotes(list);
   if (filtered.length === 0) {
@@ -8848,9 +9011,7 @@ async function downloadSavedQuotesCsv() {
 }
 
 async function downloadSupplierQuotesCsv(vendorName) {
-  const raw = await storageGet("nextex_quotes");
-  let list = [];
-  try { list = raw ? JSON.parse(raw) : []; } catch (e) { list = []; }
+  let list = await getQuotes();
 
   const target = vendorName.toLowerCase();
   const filtered = list.filter(function(e) { return (e.vendor || "").toLowerCase() === target; });
@@ -9090,9 +9251,7 @@ function buildQuoteDetailHtml(entry, activeMeeting) {
 async function renderLog() {
   renderVendorFilterChip();
   const container = document.getElementById("log-list");
-  const raw = await storageGet("nextex_quotes");
-  let list = [];
-  try { list = raw ? JSON.parse(raw) : []; } catch (e) { list = []; }
+  let list = await getQuotes();
   populateSupplierFilterDropdown(list);
   const activeMeetingForRow = await getActiveMeeting();
 
@@ -9236,9 +9395,7 @@ async function renderSavedTable() {
   const wrap = document.getElementById("saved-table-wrap");
   if (wrap.style.display === "none") return;
 
-  const raw = await storageGet("nextex_quotes");
-  let list = [];
-  try { list = raw ? JSON.parse(raw) : []; } catch (e) { list = []; }
+  let list = await getQuotes();
   const activeMeetingForRow = await getActiveMeeting();
 
   if (list.length === 0) {
@@ -9288,9 +9445,7 @@ async function renderGalleryView() {
   const wrap = document.getElementById("saved-gallery-wrap");
   if (wrap.style.display === "none") return;
 
-  const raw = await storageGet("nextex_quotes");
-  let list = [];
-  try { list = raw ? JSON.parse(raw) : []; } catch (e) { list = []; }
+  let list = await getQuotes();
 
   populateSupplierFilterDropdown(list);
 
@@ -9337,11 +9492,9 @@ function populateSupplierFilterDropdown(list) {
 }
 
 async function deleteQuote(id) {
-  const raw = await storageGet("nextex_quotes");
-  let list = [];
-  try { list = raw ? JSON.parse(raw) : []; } catch (e) { list = []; }
+  let list = await getQuotes();
   list = list.filter(function(e) { return e.id !== id; });
-  const ok = await storageSet("nextex_quotes", JSON.stringify(list));
+  const ok = await saveQuotes(list);
   if (ok) {
     renderLog();
     showToast("Quote deleted.");
@@ -9352,7 +9505,7 @@ async function deleteQuote(id) {
 
 function clearLog() {
   showConfirm("Clear all saved quotes? This cannot be undone.", async function() {
-    const ok = await storageSet("nextex_quotes", JSON.stringify([]));
+    const ok = await saveQuotes([]);
     if (ok) {
       renderLog();
       showToast("Saved quotes cleared.");
@@ -9576,9 +9729,7 @@ async function renderSupplierList() {
   let suppliers = [];
   try { suppliers = rawSuppliers ? JSON.parse(rawSuppliers) : []; } catch (e) { suppliers = []; }
 
-  const rawQuotes = await storageGet("nextex_quotes");
-  let quotes = [];
-  try { quotes = rawQuotes ? JSON.parse(rawQuotes) : []; } catch (e) { quotes = []; }
+  let quotes = await getQuotes();
 
   if (suppliers.length === 0) {
     container.innerHTML = '<div class="log-empty"><div class="icon">&#127970;</div>No suppliers yet.<br>Add one above, save a quote with a vendor, or scan a business card.</div>';
