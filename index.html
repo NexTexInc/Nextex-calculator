@@ -1364,6 +1364,7 @@
       <span class="hamburger-chevron" id="hamburger-chevron-database">&#9662;</span>
     </button>
     <div class="hamburger-submenu" id="hamburger-submenu-database" style="display:none;">
+      <button type="button" class="hamburger-submenu-item" onclick="openManualItemCreation()">New Item</button>
       <button type="button" class="hamburger-submenu-item" onclick="openDatabaseHome()">All Items &#8594;</button>
     </div>
   </div>
@@ -2385,6 +2386,33 @@
         <span class="section-label" style="margin:0;">Create Item</span>
       </div>
 
+      <div class="field" id="item-manual-category-field" style="display:none;">
+        <label>Category</label>
+        <div class="chip-group" id="item-manual-category-group">
+          <button type="button" class="chip selected" data-cat="curtains" onclick="setItemCreationCategory('curtains')">Curtains</button>
+          <button type="button" class="chip" data-cat="cushions" onclick="setItemCreationCategory('cushions')">Cushions</button>
+        </div>
+      </div>
+
+      <div id="item-manual-fields" style="display:none;">
+        <div class="field">
+          <label for="item-manual-vendor">Vendor / Supplier</label>
+          <input type="text" id="item-manual-vendor" oninput="updateItemDescriptionPreview()">
+        </div>
+        <div class="field">
+          <label for="item-manual-customer">Customer</label>
+          <input type="text" id="item-manual-customer">
+        </div>
+        <div class="field">
+          <label for="item-manual-cost">Cost (USD)</label>
+          <input type="text" inputmode="decimal" id="item-manual-cost" placeholder="0.00">
+        </div>
+        <div class="field">
+          <label for="item-size-manual">Size</label>
+          <input type="text" id="item-size-manual" placeholder="e.g. 37&quot;W x 84&quot;L, 20x20&quot;" oninput="updateItemDescriptionPreview()">
+        </div>
+      </div>
+
       <div class="field">
         <label>Design</label>
         <div class="chip-group" id="item-design-choice-group">
@@ -2418,7 +2446,7 @@
         <input type="text" id="item-design-name" placeholder="Optional" oninput="updateItemDescriptionPreview()">
       </div>
 
-      <div class="field">
+      <div class="field" id="item-size-quote-field">
         <label for="item-size">Size</label>
         <select id="item-size" onchange="handleItemSizeChange()"></select>
       </div>
@@ -2500,6 +2528,12 @@
         </div>
         <div class="field-hint">Set this once to match your real numbering history.</div>
       </div>
+
+      <div class="field-row" style="gap:8px; margin-bottom:14px;">
+        <button type="button" class="scan-btn" style="flex:1;" onclick="downloadItemTemplate()">Download Template</button>
+        <button type="button" class="scan-btn" style="flex:1;" onclick="triggerBulkItemUpload()">Bulk Upload</button>
+      </div>
+      <input type="file" id="bulk-item-upload-input" accept=".xlsx,.xls" style="display:none;" onchange="handleBulkItemUpload(event)">
 
       <div class="field">
         <label for="database-search">Search by Item #</label>
@@ -4018,7 +4052,76 @@ let itemCreationSourceQuote = null;
 let itemCreationDesignChoice = "new";
 let itemCreationPiping = "NO";
 let itemCreationPackType = "SINGLE";
+let itemCreationCategory = "curtains";
+let itemCreationManualMode = false;
 let screenBeforeItemCreation = "log";
+
+async function openManualItemCreation() {
+  document.getElementById("hamburger-drawer").classList.remove("show");
+  document.getElementById("hamburger-backdrop").classList.remove("show");
+  itemCreationSourceQuote = null;
+  itemCreationManualMode = true;
+  itemCreationCategory = "curtains";
+
+  const activeScreen = document.querySelector(".screen.active");
+  if (activeScreen) screenBeforeItemCreation = activeScreen.id.replace("screen-", "");
+
+  itemCreationDesignChoice = "new";
+  document.querySelectorAll("#item-design-choice-group .chip").forEach(function(b) {
+    b.classList.toggle("selected", b.getAttribute("data-choice") === "new");
+  });
+  document.getElementById("item-existing-design-field").style.display = "none";
+  document.getElementById("item-brand").value = "";
+  document.getElementById("item-design-name").value = "";
+  document.getElementById("item-color").value = "";
+  document.getElementById("item-closure-type").value = "";
+  document.getElementById("item-fill-type").value = "";
+  document.getElementById("item-mill-ref").value = "";
+  document.getElementById("item-coating").value = "";
+  document.getElementById("item-mount-type").value = "";
+  document.getElementById("item-manual-vendor").value = "";
+  document.getElementById("item-manual-customer").value = "";
+  document.getElementById("item-manual-cost").value = "";
+  document.getElementById("item-size-manual").value = "";
+  itemCreationPiping = "NO";
+  document.querySelectorAll("#item-piping-group .chip").forEach(function(b) {
+    b.classList.toggle("selected", b.getAttribute("data-val") === "NO");
+  });
+  itemCreationPackType = "SINGLE";
+  document.querySelectorAll("#item-pack-type-group .chip").forEach(function(b) {
+    b.classList.toggle("selected", b.getAttribute("data-val") === "SINGLE");
+  });
+
+  document.getElementById("item-manual-category-field").style.display = "block";
+  document.getElementById("item-manual-fields").style.display = "block";
+  document.getElementById("item-size-quote-field").style.display = "none";
+  document.querySelectorAll("#item-manual-category-group .chip").forEach(function(b) {
+    b.classList.toggle("selected", b.getAttribute("data-cat") === "curtains");
+  });
+  document.getElementById("item-cushion-fields").style.display = "none";
+  document.getElementById("item-curtain-fields").style.display = "block";
+
+  await populateExistingDesignDropdown();
+  const nextNum = await getNextItemNumber();
+  document.getElementById("item-number-display").textContent = nextNum || "(set a starting number in the Database first)";
+  document.getElementById("item-design-number-display").textContent = nextNum ? ("D-" + nextNum) : "";
+
+  document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
+  document.getElementById("screen-item-creation").classList.add("active");
+  document.getElementById("tabbar").style.display = "none";
+  updateItemDescriptionPreview();
+}
+
+function setItemCreationCategory(cat) {
+  itemCreationCategory = cat;
+  document.querySelectorAll("#item-manual-category-group .chip").forEach(function(b) {
+    b.classList.toggle("selected", b.getAttribute("data-cat") === cat);
+  });
+  const isCushion = cat === "cushions";
+  document.getElementById("item-cushion-fields").style.display = isCushion ? "block" : "none";
+  document.getElementById("item-curtain-fields").style.display = isCushion ? "none" : "block";
+  updateItemDescriptionPreview();
+}
 
 async function openItemCreation(quoteId) {
   const raw = await storageGet("nextex_quotes");
@@ -4030,9 +4133,15 @@ async function openItemCreation(quoteId) {
     return;
   }
   itemCreationSourceQuote = entry;
+  itemCreationManualMode = false;
+  itemCreationCategory = entry.category;
 
   const activeScreen = document.querySelector(".screen.active");
   if (activeScreen) screenBeforeItemCreation = activeScreen.id.replace("screen-", "");
+
+  document.getElementById("item-manual-category-field").style.display = "none";
+  document.getElementById("item-manual-fields").style.display = "none";
+  document.getElementById("item-size-quote-field").style.display = "block";
 
   // Reset form state
   itemCreationDesignChoice = "new";
@@ -4160,16 +4269,23 @@ function setItemPackType(val) {
   updateItemDescriptionPreview();
 }
 
+function getItemSizeValue() {
+  if (itemCreationManualMode) {
+    return document.getElementById("item-size-manual").value.trim();
+  }
+  const sizeSelect = document.getElementById("item-size");
+  return (sizeSelect.value || "").split("|")[0];
+}
+
 function buildItemDescription() {
-  if (!itemCreationSourceQuote) return "";
+  if (!itemCreationSourceQuote && !itemCreationManualMode) return "";
   const brand = document.getElementById("item-brand").value.trim();
   const designName = document.getElementById("item-design-name").value.trim();
   const color = document.getElementById("item-color").value.trim();
-  const sizeSelect = document.getElementById("item-size");
-  const sizeLabel = (sizeSelect.value || "").split("|")[0];
+  const sizeLabel = getItemSizeValue();
   const nextNum = document.getElementById("item-number-display").textContent;
 
-  if (itemCreationSourceQuote.category === "cushions") {
+  if (itemCreationCategory === "cushions") {
     const backing = document.getElementById("item-backing").value;
     const backingAbbrev = backing === "BACK TO BACK" ? "B2B" : "VLVT/LN";
     const pipingAbbrev = itemCreationPiping === "NO" ? "KE" : "W/PIPING";
@@ -4191,7 +4307,7 @@ function updateItemDescriptionPreview() {
 }
 
 async function saveItem() {
-  if (!itemCreationSourceQuote) return;
+  if (!itemCreationSourceQuote && !itemCreationManualMode) return;
   const nextNum = await getNextItemNumber();
   if (!nextNum) {
     showToast("Set a starting Item # in the Database first.", "error");
@@ -4210,9 +4326,12 @@ async function saveItem() {
     designNumber = "D-" + nextNum;
   }
 
-  const sizeSelect = document.getElementById("item-size");
-  const sizeLabel = (sizeSelect.value || "").split("|")[0];
+  const sizeLabel = getItemSizeValue();
   const entry = itemCreationSourceQuote;
+  const category = itemCreationCategory;
+  const vendor = itemCreationManualMode ? document.getElementById("item-manual-vendor").value.trim() : (entry.vendor || "");
+  const customer = itemCreationManualMode ? document.getElementById("item-manual-customer").value.trim() : (entry.customer || "");
+  const costVal = itemCreationManualMode ? parseFloat(document.getElementById("item-manual-cost").value) || 0 : null;
 
   const item = {
     id: "item_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
@@ -4220,25 +4339,26 @@ async function saveItem() {
     designNumber: designNumber,
     brand: document.getElementById("item-brand").value.trim(),
     designName: document.getElementById("item-design-name").value.trim(),
-    category: entry.category,
+    category: category,
     size: sizeLabel,
     color: document.getElementById("item-color").value.trim(),
     description: buildItemDescription(),
-    vendor: entry.vendor || "",
-    customer: entry.customer || "",
-    quoteId: entry.id,
-    photo: entry.photo || "",
+    vendor: vendor,
+    customer: customer,
+    cost: costVal,
+    quoteId: entry ? entry.id : null,
+    photo: entry ? (entry.photo || "") : "",
     createdDate: new Date().toLocaleDateString(),
     // cushion-specific
-    backing: entry.category === "cushions" ? document.getElementById("item-backing").value : "",
-    piping: entry.category === "cushions" ? itemCreationPiping : "",
-    closureType: entry.category === "cushions" ? document.getElementById("item-closure-type").value.trim() : "",
-    fillType: entry.category === "cushions" ? document.getElementById("item-fill-type").value.trim() : "",
-    millRef: entry.category === "cushions" ? document.getElementById("item-mill-ref").value.trim() : "",
+    backing: category === "cushions" ? document.getElementById("item-backing").value : "",
+    piping: category === "cushions" ? itemCreationPiping : "",
+    closureType: category === "cushions" ? document.getElementById("item-closure-type").value.trim() : "",
+    fillType: category === "cushions" ? document.getElementById("item-fill-type").value.trim() : "",
+    millRef: category === "cushions" ? document.getElementById("item-mill-ref").value.trim() : "",
     // curtain-specific
-    packType: entry.category !== "cushions" ? itemCreationPackType : "",
-    coating: entry.category !== "cushions" ? document.getElementById("item-coating").value.trim() : "",
-    mountType: entry.category !== "cushions" ? document.getElementById("item-mount-type").value.trim() : ""
+    packType: category !== "cushions" ? itemCreationPackType : "",
+    coating: category !== "cushions" ? document.getElementById("item-coating").value.trim() : "",
+    mountType: category !== "cushions" ? document.getElementById("item-mount-type").value.trim() : ""
   };
 
   const items = await getItems();
@@ -4310,6 +4430,167 @@ async function renderDatabaseHome() {
       '<button type="button" class="cq-back-btn" style="flex:none;" onclick="showQRCodeForItem(\'' + attrSafe(it.itemNumber) + '\')">QR Code</button>' +
     '</div>';
   }).join("");
+}
+
+async function downloadItemTemplate() {
+  try {
+    await ensureXLSXLibLoaded();
+  } catch (e) {
+    showToast("Could not load the spreadsheet library. Check your connection and try again.", "error");
+    return;
+  }
+  const headers = [
+    "Item #", "Design # (blank = new design)", "Category (curtains/cushions)", "Brand", "Design Name",
+    "Size", "Color", "Vendor", "Customer", "Cost (USD)",
+    "Backing (cushions)", "Piping YES/NO (cushions)", "Closure Type (cushions)", "Fill Type (cushions)", "Mill Ref (cushions)",
+    "Pack Type SINGLE/2PK (curtains)", "Coating (curtains)", "Mount Type (curtains)",
+    "Description (blank = auto-generated)"
+  ];
+  const exampleRow = [
+    "946TEX", "", "curtains", "BLACKOUTiQ", "",
+    "37\"W x 84\"L", "BLACK", "Hangzhou Enyu", "Walmart Canada", "7.11",
+    "", "", "", "", "",
+    "2PK", "Blackout", "Grommet",
+    ""
+  ];
+  const ws = window.XLSX.utils.aoa_to_sheet([headers, exampleRow]);
+  ws["!cols"] = headers.map(function() { return { wch: 22 }; });
+  const wb = window.XLSX.utils.book_new();
+  window.XLSX.utils.book_append_sheet(wb, ws, "Item Template");
+  window.XLSX.writeFile(wb, "NexTex_Item_Creation_Template.xlsx");
+  showToast("Downloading template\u2026", "success");
+}
+
+function triggerBulkItemUpload() {
+  document.getElementById("bulk-item-upload-input").click();
+}
+
+async function handleBulkItemUpload(event) {
+  const file = event.target.files && event.target.files[0];
+  event.target.value = "";
+  if (!file) return;
+
+  try {
+    await ensureXLSXLibLoaded();
+  } catch (e) {
+    showToast("Could not load the spreadsheet library. Check your connection and try again.", "error");
+    return;
+  }
+
+  let wb;
+  try {
+    const buffer = await file.arrayBuffer();
+    wb = window.XLSX.read(buffer, { type: "array" });
+  } catch (e) {
+    showToast("Could not read that file. Make sure it's a valid Excel file.", "error");
+    return;
+  }
+
+  const sheetName = wb.SheetNames[0];
+  const rows = window.XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, defval: "" });
+  const dataRows = rows.slice(1).filter(function(r) { return r.some(function(c) { return String(c).trim() !== ""; }); });
+
+  if (dataRows.length === 0) {
+    showToast("No data rows found in that file.", "error");
+    return;
+  }
+
+  const items = await getItems();
+  const nextNum = await getNextItemNumber();
+  const suffix = nextNum ? nextNum.replace(/^\d+/, "") : "TEX";
+  let highestNumericSeen = 0;
+  if (nextNum) {
+    const m = nextNum.match(/^(\d+)/);
+    if (m) highestNumericSeen = parseInt(m[1], 10) - 1;
+  }
+
+  let createdCount = 0;
+
+  dataRows.forEach(function(row) {
+    const itemNumberRaw = String(row[0] || "").trim();
+    const designNumberRaw = String(row[1] || "").trim();
+    const categoryRaw = String(row[2] || "").trim().toLowerCase();
+    const brand = String(row[3] || "").trim();
+    const designName = String(row[4] || "").trim();
+    const size = String(row[5] || "").trim();
+    const color = String(row[6] || "").trim();
+    const vendor = String(row[7] || "").trim();
+    const customer = String(row[8] || "").trim();
+    const costRaw = row[9];
+    const backing = String(row[10] || "").trim();
+    const piping = String(row[11] || "").trim().toUpperCase();
+    const closureType = String(row[12] || "").trim();
+    const fillType = String(row[13] || "").trim();
+    const millRef = String(row[14] || "").trim();
+    const packType = String(row[15] || "").trim().toUpperCase();
+    const coating = String(row[16] || "").trim();
+    const mountType = String(row[17] || "").trim();
+    const descriptionRaw = String(row[18] || "").trim();
+
+    const category = (categoryRaw === "cushions") ? "cushions" : "curtains";
+
+    let itemNumber = itemNumberRaw;
+    if (!itemNumber) {
+      highestNumericSeen += 1;
+      itemNumber = highestNumericSeen + suffix;
+    } else {
+      const m = itemNumber.match(/^(\d+)/);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (n > highestNumericSeen) highestNumericSeen = n;
+      }
+    }
+
+    const designNumber = designNumberRaw || ("D-" + itemNumber);
+
+    let description = descriptionRaw;
+    if (!description) {
+      if (category === "cushions") {
+        const backingAbbrev = backing.toUpperCase() === "BACK TO BACK" ? "B2B" : "VLVT/LN";
+        const pipingAbbrev = piping === "YES" ? "W/PIPING" : "KE";
+        const parts = [brand, designName, color, size, backingAbbrev, pipingAbbrev, "SHELL"].filter(function(p) { return p; });
+        description = parts.join(" ");
+        if (millRef) description += " " + millRef;
+      } else {
+        const parts = [itemNumber, brand, size, color].filter(function(p) { return p; });
+        description = parts.join(" ");
+        if (packType === "2PK") description += " 2PK";
+      }
+    }
+
+    items.push({
+      id: "item_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7) + "_" + createdCount,
+      itemNumber: itemNumber,
+      designNumber: designNumber,
+      brand: brand,
+      designName: designName,
+      category: category,
+      size: size,
+      color: color,
+      description: description,
+      vendor: vendor,
+      customer: customer,
+      cost: (typeof costRaw === "number") ? costRaw : (parseFloat(costRaw) || null),
+      quoteId: null,
+      photo: "",
+      createdDate: new Date().toLocaleDateString(),
+      backing: category === "cushions" ? backing : "",
+      piping: category === "cushions" ? piping : "",
+      closureType: category === "cushions" ? closureType : "",
+      fillType: category === "cushions" ? fillType : "",
+      millRef: category === "cushions" ? millRef : "",
+      packType: category !== "cushions" ? packType : "",
+      coating: category !== "cushions" ? coating : "",
+      mountType: category !== "cushions" ? mountType : ""
+    });
+    createdCount++;
+  });
+
+  await saveItems(items);
+  await setNextItemNumberValue((highestNumericSeen + 1) + suffix);
+
+  showToast(createdCount + " item" + (createdCount === 1 ? "" : "s") + " created from the file.", "success");
+  renderDatabaseHome();
 }
 
 function triggerGalleryUpload() {
@@ -5991,6 +6272,21 @@ function ensureTesseractLoaded() {
 // QR code generation for Item Database records
 // ---------------------------------------------------------------
 let qrCodeLibLoadPromise = null;
+
+let xlsxLibLoadPromise = null;
+
+function ensureXLSXLibLoaded() {
+  if (typeof window.XLSX !== "undefined") return Promise.resolve();
+  if (xlsxLibLoadPromise) return xlsxLibLoadPromise;
+  xlsxLibLoadPromise = new Promise(function(resolve, reject) {
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";
+    script.onload = function() { resolve(); };
+    script.onerror = function() { reject(new Error("Could not load the spreadsheet library")); };
+    document.head.appendChild(script);
+  });
+  return xlsxLibLoadPromise;
+}
 
 function ensureQRCodeLibLoaded() {
   if (typeof window.QRCode !== "undefined") return Promise.resolve();
