@@ -1898,6 +1898,8 @@
           <span class="toggle" onclick="downloadSavedQuotesCsv()">&#11015; Download CSV</span>
           &nbsp;&nbsp;
           <span class="toggle" onclick="exportSavedQuotesWithQR()">&#11015; Quote Sheet with QR</span>
+          &nbsp;&nbsp;
+          <span class="toggle" onclick="exportStickerSheetPDF()">&#11015; Sticker Sheet (PDF)</span>
         </span>
       </p>
       <div class="field-row" style="gap:8px; margin-bottom:10px;">
@@ -5141,6 +5143,124 @@ async function exportSavedQuotesWithQR() {
   showToast("Downloading Quote Sheet\u2026", "success");
 }
 
+// Converts the GIF data URL our QR generator produces into a PNG data URL,
+// since pdf-lib can only embed PNG or JPG images, not GIF.
+function convertGifDataUrlToPng(gifDataUrl) {
+  return new Promise(function(resolve, reject) {
+    const img = new Image();
+    img.onload = function() {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0);
+      resolve(canvas.toDataURL("image/png"));
+    };
+    img.onerror = function() { reject(new Error("Could not convert QR image")); };
+    img.src = gifDataUrl;
+  });
+}
+
+function dataUrlToUint8Array(dataUrl) {
+  const base64 = dataUrl.split(",")[1];
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+async function exportStickerSheetPDF() {
+  try {
+    await ensurePDFLibLoaded();
+    await ensureQRCodeLibLoaded();
+  } catch (e) {
+    showToast("Could not load the required libraries. Check your connection and try again.", "error");
+    return;
+  }
+
+  const raw = await storageGet("nextex_quotes");
+  let quotes = [];
+  try { quotes = raw ? JSON.parse(raw) : []; } catch (e) { quotes = []; }
+  quotes = quotes.filter(function(q) { return q.item; });
+  if (quotes.length === 0) {
+    showToast("No saved quotes with an item # yet.", "error");
+    return;
+  }
+
+  showToast("Building Sticker Sheet\u2026", "success");
+
+  // Exact measurements extracted from the SI-LABEL-LS-0101 (S001) template's
+  // own XML (twips, where 1440 twips = 1in = 72pt, so twips/20 = points
+  // exactly -- used directly rather than rounded decimals to avoid adding
+  // any imprecision of our own on top of the template's).
+  const twipsToPt = function(twips) { return twips / 20; };
+  const PAGE_W = twipsToPt(12240);   // 8.5in
+  const PAGE_H = twipsToPt(15840);   // 11in
+  const MARGIN_TOP = twipsToPt(720); // 0.5in
+  const MARGIN_LEFT = twipsToPt(540 + 29); // 0.375in left margin + the template's own tblInd offset
+  const CELL_W = twipsToPt(1392);
+  const CELL_H = twipsToPt(1440);    // 1.0in
+  const H_GAP = twipsToPt(236);
+  const V_GAP = twipsToPt(180);
+  const COLS = 7;
+  const ROWS = 9;
+  const PER_PAGE = COLS * ROWS;
+
+  // QR sized to leave room for a caption below, within the 1" cell height.
+  const QR_SIZE = 50;
+  const CAPTION_FONT_SIZE = 6.5;
+
+  const pdfDoc = await window.PDFLib.PDFDocument.create();
+  const font = await pdfDoc.embedFont(window.PDFLib.StandardFonts.Helvetica);
+
+  for (let start = 0; start < quotes.length; start += PER_PAGE) {
+    const page = pdfDoc.addPage([PAGE_W, PAGE_H]);
+    const pageQuotes = quotes.slice(start, start + PER_PAGE);
+
+    for (let i = 0; i < pageQuotes.length; i++) {
+      const entry = pageQuotes[i];
+      const col = i % COLS;
+      const row = Math.floor(i / COLS);
+
+      const cellX = MARGIN_LEFT + col * (CELL_W + H_GAP);
+      // PDF y-origin is bottom-left, so row 0 is the topmost row of the sheet.
+      const cellTopY = PAGE_H - MARGIN_TOP - row * (CELL_H + V_GAP);
+
+      try {
+        const gifDataUrl = generateQRDataURL(entry.item, 20, 20);
+        const pngDataUrl = await convertGifDataUrlToPng(gifDataUrl);
+        const pngBytes = dataUrlToUint8Array(pngDataUrl);
+        const qrImage = await pdfDoc.embedPng(pngBytes);
+
+        const qrX = cellX + (CELL_W - QR_SIZE) / 2;
+        const qrY = cellTopY - QR_SIZE - 4;
+        page.drawImage(qrImage, { x: qrX, y: qrY, width: QR_SIZE, height: QR_SIZE });
+
+        const caption = String(entry.item);
+        const textWidth = font.widthOfTextAtSize(caption, CAPTION_FONT_SIZE);
+        const textX = cellX + (CELL_W - textWidth) / 2;
+        const textY = qrY - CAPTION_FONT_SIZE - 2;
+        page.drawText(caption, { x: Math.max(textX, cellX), y: textY, size: CAPTION_FONT_SIZE, font: font });
+      } catch (e) {
+        // If a single quote's QR fails to generate, skip just that label
+        // rather than aborting the whole sheet.
+      }
+    }
+  }
+
+  const pdfBytes = await pdfDoc.save();
+  const blob = new Blob([pdfBytes], { type: "application/pdf" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "NexTex_Sticker_Sheet_" + new Date().toISOString().slice(0, 10) + ".pdf";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  showToast("Downloading Sticker Sheet\u2026", "success");
+}
+
 async function downloadItemTemplate() {
   try {
     await ensureExcelJSLibLoaded();
@@ -7074,6 +7194,21 @@ function ensureTesseractLoaded() {
 // QR code generation for Item Database records
 // ---------------------------------------------------------------
 let qrCodeLibLoadPromise = null;
+
+let pdfLibLoadPromise = null;
+
+function ensurePDFLibLoaded() {
+  if (typeof window.PDFLib !== "undefined") return Promise.resolve();
+  if (pdfLibLoadPromise) return pdfLibLoadPromise;
+  pdfLibLoadPromise = new Promise(function(resolve, reject) {
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js";
+    script.onload = function() { resolve(); };
+    script.onerror = function() { reject(new Error("Could not load the PDF library")); };
+    document.head.appendChild(script);
+  });
+  return pdfLibLoadPromise;
+}
 
 let cropperLibLoadPromise = null;
 
