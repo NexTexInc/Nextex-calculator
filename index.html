@@ -5196,27 +5196,30 @@ async function exportStickerSheetPDF() {
 
   showToast("Building Sticker Sheet\u2026", "success");
 
-  // Exact measurements extracted from the Avery 22805 template's own XML
-  // (twips, where 1440 twips = 1in = 72pt, so twips/20 = points exactly --
-  // used directly rather than rounded decimals to avoid adding any
-  // imprecision of our own on top of the template's). Cross-checked against
-  // Avery's own published spec: 1.5in x 1.5in, 24 labels per sheet.
+  // Measurements cross-checked directly against Avery's own production PDF
+  // template (vector rectangle coordinates extracted from its content
+  // stream) rather than relying solely on the Word template's XML -- the
+  // Word doc's left margin turned out to be off by ~6pt from the real PDF.
   const twipsToPt = function(twips) { return twips / 20; };
   const PAGE_W = twipsToPt(12240);    // 8.5in
   const PAGE_H = twipsToPt(15840);    // 11in
-  const MARGIN_TOP = twipsToPt(720);  // 0.5in
-  const MARGIN_LEFT = twipsToPt(1248); // 0.8667in (this template's tblInd is 0)
-  const CELL_W = twipsToPt(2160);     // 1.5in
-  const CELL_H = twipsToPt(2160);     // 1.5in
-  const H_GAP = twipsToPt(451);
-  const V_GAP = twipsToPt(288);
+  const MARGIN_TOP = 36;              // confirmed exact match to Avery's PDF
+  const MARGIN_LEFT = 56.15;          // Avery's PDF box left edge, not the Word doc's 62.4
+  const CELL_W = 108;                 // 1.5in, confirmed exact match
+  const CELL_H = 108;                 // 1.5in, confirmed exact match
+  const H_GAP = 22.55;                // confirmed exact match
+  const V_GAP = 14.4;                 // confirmed exact match
   const COLS = 4;
   const ROWS = 6;
   const PER_PAGE = COLS * ROWS;
 
-  // QR and caption scaled up to make use of the larger 1.5" cell.
+  // QR and caption sized with real clearance from the cell's own top edge --
+  // the previous 4pt gap left almost no tolerance for a printer's natural
+  // feed drift, which accumulates going down the page and would crop the
+  // QR's top edge worst on the bottom rows, exactly as reported.
   const QR_SIZE = 78;
   const CAPTION_FONT_SIZE = 9;
+  const TOP_CLEARANCE = 9;
 
   const pdfDoc = await window.PDFLib.PDFDocument.create();
   const font = await pdfDoc.embedFont(window.PDFLib.StandardFonts.Helvetica);
@@ -5241,13 +5244,13 @@ async function exportStickerSheetPDF() {
         const qrImage = await pdfDoc.embedPng(pngBytes);
 
         const qrX = cellX + (CELL_W - QR_SIZE) / 2;
-        const qrY = cellTopY - QR_SIZE - 4;
+        const qrY = cellTopY - TOP_CLEARANCE - QR_SIZE;
         page.drawImage(qrImage, { x: qrX, y: qrY, width: QR_SIZE, height: QR_SIZE });
 
         const caption = String(entry.item);
         const textWidth = font.widthOfTextAtSize(caption, CAPTION_FONT_SIZE);
         const textX = cellX + (CELL_W - textWidth) / 2;
-        const textY = qrY - CAPTION_FONT_SIZE - 2;
+        const textY = qrY - CAPTION_FONT_SIZE - 4;
         page.drawText(caption, { x: Math.max(textX, cellX), y: textY, size: CAPTION_FONT_SIZE, font: font });
       } catch (e) {
         // If a single quote's QR fails to generate, skip just that label
