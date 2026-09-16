@@ -1896,8 +1896,16 @@
           <span class="toggle" onclick="toggleSavedView()" id="saved-view-toggle">Table view</span>
           &nbsp;&nbsp;
           <span class="toggle" onclick="downloadSavedQuotesCsv()">&#11015; Download CSV</span>
+          &nbsp;&nbsp;
+          <span class="toggle" onclick="exportSavedQuotesWithQR()">&#11015; Quote Sheet with QR</span>
         </span>
       </p>
+      <div class="field-row" style="gap:8px; margin-bottom:10px;">
+        <input type="text" id="saved-quotes-search" placeholder="Search by item # or supplier..." style="flex:1;" oninput="renderLog()">
+        <button type="button" class="scan-btn" style="flex:none; padding:0 16px;" onclick="triggerSavedQuoteScan()">Scan</button>
+      </div>
+      <input type="file" id="saved-quote-scan-input" accept="image/*" capture="environment" style="display:none;" onchange="handleSavedQuoteScan(event)">
+      <div class="field-hint" id="saved-quote-scan-status" style="margin-top:-4px; margin-bottom:8px;"></div>
       <div class="settings-panel" id="sort-filter-panel">
         <div class="settings-sub">Sort by</div>
         <div class="chip-group" id="sort-chip-group">
@@ -5016,6 +5024,123 @@ async function exportItemMaster() {
   showToast("Downloading Item Master\u2026", "success");
 }
 
+async function exportSavedQuotesWithQR() {
+  try {
+    await ensureExcelJSLibLoaded();
+    await ensureQRCodeLibLoaded();
+  } catch (e) {
+    showToast("Could not load the required libraries. Check your connection and try again.", "error");
+    return;
+  }
+
+  const raw = await storageGet("nextex_quotes");
+  let quotes = [];
+  try { quotes = raw ? JSON.parse(raw) : []; } catch (e) { quotes = []; }
+  if (quotes.length === 0) {
+    showToast("No saved quotes yet.", "error");
+    return;
+  }
+
+  showToast("Building Quote Sheet\u2026", "success");
+
+  const workbook = new window.ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Quote Sheet");
+
+  const headers = [
+    "QR Code", "Item #", "Vendor", "Customer", "Category", "Size", "Cost (USD)", "Date", "Notes"
+  ];
+  const QR_COL_WIDTH_CHARS = 14;
+  const QR_ROW_HEIGHT_POINTS = 78;
+  const QR_CELL_PX = 103;
+  const QR_IMAGE_PX = 85;
+  const QR_CENTER_OFFSET = (QR_CELL_PX - QR_IMAGE_PX) / 2 / QR_CELL_PX;
+
+  headers.forEach(function(h, i) {
+    sheet.getColumn(i + 1).width = i === 0 ? QR_COL_WIDTH_CHARS : (h === "Notes" ? 40 : 20);
+  });
+
+  sheet.getRow(1).height = 42;
+  const lastColLetter = String.fromCharCode(64 + headers.length);
+  sheet.mergeCells("A1:" + lastColLetter + "1");
+  sheet.getCell("A1").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF00112C" } };
+  const logoBase64 = getLogoBase64ForExcel();
+  if (logoBase64) {
+    const logoImageId = workbook.addImage({ base64: logoBase64, extension: "png" });
+    sheet.addImage(logoImageId, {
+      tl: { col: 0.15, row: 0.12 },
+      ext: { width: 950, height: 56 }
+    });
+  }
+
+  const HEADER_ROW = 2;
+  sheet.getRow(HEADER_ROW).values = headers;
+  sheet.getRow(HEADER_ROW).eachCell(function(cell) {
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF16324F" } };
+    cell.alignment = { horizontal: "center", vertical: "middle" };
+  });
+
+  const THIN_BORDER = { style: "thin" };
+  const settingsForExport = getSettings();
+
+  for (let i = 0; i < quotes.length; i++) {
+    const entry = quotes[i];
+    const rowIdx = i + 3;
+
+    const headlinePrice = (entry.prices && entry.prices[0]) ? entry.prices[0] : null;
+    const cushionPrice = (!headlinePrice && entry.category === "cushions") ? computeCushionPriceForEntry(entry, settingsForExport) : null;
+    let sizeLabel = "";
+    let costVal = null;
+    if (headlinePrice) {
+      sizeLabel = headlinePrice.label + (headlinePrice.pair ? " (pair)" : "");
+      costVal = headlinePrice.usd;
+    } else if (cushionPrice) {
+      sizeLabel = CUSHION_SIZE_LABELS[entry.cushionSize] || entry.cushionSize || "";
+      costVal = cushionPrice.usd;
+    }
+
+    sheet.getRow(rowIdx).values = [
+      "", entry.item || "", entry.vendor || "", entry.customer || "",
+      entry.category === "cushions" ? "Cushions" : "Curtains",
+      sizeLabel, costVal, entry.date || "", entry.notes || ""
+    ];
+    sheet.getRow(rowIdx).height = QR_ROW_HEIGHT_POINTS;
+    sheet.getRow(rowIdx).eachCell({ includeEmpty: true }, function(cell) {
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.border = { top: THIN_BORDER, bottom: THIN_BORDER, left: THIN_BORDER, right: THIN_BORDER };
+    });
+
+    if (entry.item) {
+      try {
+        const qrDataUrl = generateQRDataURL(entry.item, 20, 20);
+        const base64 = qrDataUrl.split(",")[1];
+        const imageId = workbook.addImage({ base64: base64, extension: "gif" });
+        sheet.addImage(imageId, {
+          tl: { col: QR_CENTER_OFFSET, row: (rowIdx - 1) + QR_CENTER_OFFSET },
+          ext: { width: QR_IMAGE_PX, height: QR_IMAGE_PX }
+        });
+      } catch (e) {
+        // If a single quote's QR fails to generate, skip just that image
+        // rather than aborting the whole export.
+      }
+    }
+  }
+
+  sheet.views = [{ state: "frozen", ySplit: HEADER_ROW }];
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "NexTex_Quote_Sheet_" + new Date().toISOString().slice(0, 10) + ".xlsx";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  showToast("Downloading Quote Sheet\u2026", "success");
+}
+
 async function downloadItemTemplate() {
   try {
     await ensureExcelJSLibLoaded();
@@ -7092,6 +7217,88 @@ function ensureJsQRLoaded() {
   return jsQRLoadPromise;
 }
 
+// Shared by every "scan a QR code from a photo" entry point in the app.
+// Tries a spread of resolutions since the "right" one is unpredictable --
+// real-world testing showed different photos needing 300px, 500px, 700px,
+// or 1800px, with nothing in between working. A photo of a QR code on a
+// screen decodes better small (downsampling washes out moire interference
+// between the camera sensor and the display's pixel grid); a QR code
+// that's small within a large frame needs more resolved detail instead.
+async function decodeQRFromPhotoFile(file, onProgress) {
+  await ensureJsQRLoaded();
+  if (onProgress) onProgress("Reading QR code\u2026");
+
+  const dataUrl = await new Promise(function(resolve, reject) {
+    const reader = new FileReader();
+    reader.onload = function() { resolve(reader.result); };
+    reader.onerror = function() { reject(new Error("Could not read file")); };
+    reader.readAsDataURL(file);
+  });
+
+  const img = await new Promise(function(resolve, reject) {
+    const image = new Image();
+    image.onload = function() { resolve(image); };
+    image.onerror = function() { reject(new Error("Could not decode image")); };
+    image.src = dataUrl;
+  });
+
+  if (onProgress) onProgress("Captured photo: " + img.width + "\u00d7" + img.height + "px. Scanning\u2026");
+
+  const attempts = [300, 400, 500, 600, 700, 800, 900, 1100, 1300, 1600, 2000];
+  let result = null;
+
+  for (let i = 0; i < attempts.length && !result; i++) {
+    if (i > 0) {
+      if (onProgress) onProgress("Trying a closer look\u2026");
+      await new Promise(function(resolve) { setTimeout(resolve, 30); });
+    }
+    const maxDim = attempts[i];
+    let w = img.width, h = img.height;
+    if (w > maxDim || h > maxDim) {
+      const scale = maxDim / Math.max(w, h);
+      w = Math.round(w * scale);
+      h = Math.round(h * scale);
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0, w, h);
+    const imageData = ctx.getImageData(0, 0, w, h);
+    result = window.jsQR(imageData.data, imageData.width, imageData.height);
+  }
+
+  return { data: result ? result.data : null, width: img.width, height: img.height };
+}
+
+function triggerSavedQuoteScan() {
+  document.getElementById("saved-quote-scan-input").click();
+}
+
+async function handleSavedQuoteScan(event) {
+  const file = event.target.files && event.target.files[0];
+  event.target.value = "";
+  if (!file) return;
+  const statusEl = document.getElementById("saved-quote-scan-status");
+  statusEl.textContent = "Loading QR scanner\u2026";
+
+  try {
+    const result = await decodeQRFromPhotoFile(file, function(msg) { statusEl.textContent = msg; });
+    if (result && result.data) {
+      document.getElementById("saved-quotes-search").value = result.data;
+      renderLog();
+      statusEl.textContent = "Scanned: " + result.data;
+      showToast("Searching for \u201c" + result.data + "\u201d.", "success");
+    } else {
+      statusEl.textContent = "No QR code found in a " + result.width + "\u00d7" + result.height + "px photo. Try again with the code centered and in focus.";
+      showToast("No QR code found in that photo.", "error");
+    }
+  } catch (e) {
+    statusEl.textContent = "Scan failed \u2014 search manually instead.";
+    showToast("Could not scan the QR code. Check your connection and try again.", "error");
+  }
+}
+
 function triggerItemQRScan() {
   document.getElementById("item-qr-input").click();
 }
@@ -7105,75 +7312,7 @@ async function handleItemQRScanned(event) {
   statusEl.textContent = "Loading QR scanner\u2026";
 
   try {
-    await ensureJsQRLoaded();
-    statusEl.textContent = "Reading QR code\u2026";
-
-    const dataUrl = await new Promise(function(resolve, reject) {
-      const reader = new FileReader();
-      reader.onload = function() { resolve(reader.result); };
-      reader.onerror = function() { reject(new Error("Could not read file")); };
-      reader.readAsDataURL(file);
-    });
-
-    const img = await new Promise(function(resolve, reject) {
-      const image = new Image();
-      image.onload = function() { resolve(image); };
-      image.onerror = function() { reject(new Error("Could not decode image")); };
-      image.src = dataUrl;
-    });
-
-    statusEl.textContent = "Captured photo: " + img.width + "\u00d7" + img.height + "px. Scanning\u2026";
-
-    // Try at increasing resolutions: fast first pass, then progressively
-    // larger re-attempts if the QR code turns out to be small/blurry/
-    // compressed in the frame. A capped-too-low first pass was the actual
-    // cause of real-world scan failures on otherwise-valid photos.
-    // Different photos fail for opposite reasons: a QR code that's small
-    // within a large frame needs a HIGHER resolution to resolve detail,
-    // while a photo of a QR code on a screen (moire interference between
-    // the camera sensor and the display's pixel grid) actually decodes
-    // better at LOWER resolution, since downsampling acts as a filter
-    // that washes out that high-frequency noise. Try a small spread of
-    // both, yielding to the browser between each so a large photo (12MP+)
-    // can't block the main thread long enough to get throttled or killed
-    // by the mobile browser.
-    // jsQR's processing time balloons sharply at larger resolutions (measured
-    // ~10x slower at full photo resolution vs a small resize), so we keep this
-    // to two targeted attempts rather than a wide sweep. Small first: fast,
-    // and the fix for photos of a QR code on a screen (moire interference
-    // between the camera sensor and the display's pixel grid washes out at
-    // low resolution). Then one larger fallback for the opposite case: a QR
-    // code that's small within a large frame, which needs more resolved
-    // detail rather than less.
-    // Real-world testing across several of your actual photos showed the
-    // "right" resolution for a successful decode is genuinely unpredictable
-    // and narrow -- different photos have needed 300px, 500px, 700px, and
-    // 1800px, with nothing in between working. There's no small set of
-    // guesses that reliably covers this, so we sweep more candidates,
-    // concentrated where jsQR is fastest, with one larger fallback.
-    const attempts = [300, 400, 500, 600, 700, 800, 900, 1100, 1300, 1600, 2000];
-    let result = null;
-
-    for (let i = 0; i < attempts.length && !result; i++) {
-      if (i > 0) {
-        statusEl.textContent = "Trying a closer look\u2026";
-        await new Promise(function(resolve) { setTimeout(resolve, 30); });
-      }
-      const maxDim = attempts[i];
-      let w = img.width, h = img.height;
-      if (w > maxDim || h > maxDim) {
-        const scale = maxDim / Math.max(w, h);
-        w = Math.round(w * scale);
-        h = Math.round(h * scale);
-      }
-      const canvas = document.createElement("canvas");
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(img, 0, 0, w, h);
-      const imageData = ctx.getImageData(0, 0, w, h);
-      result = window.jsQR(imageData.data, imageData.width, imageData.height);
-    }
+    const result = await decodeQRFromPhotoFile(file, function(msg) { statusEl.textContent = msg; });
 
     if (result && result.data) {
       document.getElementById("item").value = result.data;
@@ -7181,7 +7320,7 @@ async function handleItemQRScanned(event) {
       statusEl.textContent = "QR code scanned successfully.";
       showToast("Item / style # filled from QR code.", "success");
     } else {
-      statusEl.textContent = "No QR code found in a " + img.width + "\u00d7" + img.height + "px photo \u2014 see preview below. Try again with the code centered and in focus.";
+      statusEl.textContent = "No QR code found in a " + result.width + "\u00d7" + result.height + "px photo \u2014 see preview below. Try again with the code centered and in focus.";
       showToast("No QR code found in that photo.", "error");
     }
   } catch (e) {
@@ -8342,6 +8481,15 @@ async function downloadSupplierQuotesCsv(vendorName) {
 function sortAndFilterQuotes(list) {
   let filtered = list;
 
+  const searchInput = document.getElementById("saved-quotes-search");
+  const searchTerm = searchInput ? searchInput.value.trim().toLowerCase() : "";
+  if (searchTerm) {
+    filtered = filtered.filter(function(entry) {
+      return (entry.item || "").toLowerCase().indexOf(searchTerm) !== -1 ||
+             (entry.vendor || "").toLowerCase().indexOf(searchTerm) !== -1;
+    });
+  }
+
   if (savedVendorFilter) {
     const target = savedVendorFilter.toLowerCase();
     filtered = filtered.filter(function(entry) {
@@ -8440,7 +8588,7 @@ function computeCushionPriceForEntry(entry, s) {
 // ---------------------------------------------------------------
 // Saved quotes log
 // ---------------------------------------------------------------
-function buildQuoteDetailHtml(entry) {
+function buildQuoteDetailHtml(entry, activeMeeting) {
   if (entry.category === "cushions") {
     let detailHtml = '<div class="log-date-full">Saved ' + entry.date + '</div>';
 
@@ -8507,6 +8655,9 @@ function buildQuoteDetailHtml(entry) {
     }
 
     detailHtml += (entry.notes ? '<div class="log-notes">' + escapeHtml(entry.notes) + '</div>' : '');
+    if (activeMeeting) {
+      detailHtml += '<button class="edit-quote-btn" style="border-color:var(--terracotta); color:var(--rust);" onclick="event.stopPropagation(); tagQuoteToMeeting(\'' + entry.id + '\', \'' + activeMeeting.id + '\').then(function() { showToast(\'Added to \\u201c' + escapeHtml(activeMeeting.name).replace(/'/g, "\\'") + '\\u201d.\', \'success\'); });">+ Add to \u201c' + escapeHtml(activeMeeting.name) + '\u201d</button>';
+    }
     detailHtml += '<button class="edit-quote-btn" style="background:var(--terracotta); color:white; border-color:var(--terracotta);" onclick="event.stopPropagation(); openItemCreation(\'' + entry.id + '\')">Create Item</button>';
     detailHtml += '<button class="edit-quote-btn" onclick="event.stopPropagation(); loadQuoteForEdit(\'' + entry.id + '\')">Edit this quote</button>';
     return detailHtml;
@@ -8541,6 +8692,9 @@ function buildQuoteDetailHtml(entry) {
   if ((entry.prices || []).length > 0) {
     detailHtml += '<button class="add-to-cart-btn-quote" onclick="event.stopPropagation(); processQuoteSelections(this)">Add to customer quote</button>';
   }
+  if (activeMeeting) {
+    detailHtml += '<button class="edit-quote-btn" style="border-color:var(--terracotta); color:var(--rust);" onclick="event.stopPropagation(); tagQuoteToMeeting(\'' + entry.id + '\', \'' + activeMeeting.id + '\').then(function() { showToast(\'Added to \\u201c' + escapeHtml(activeMeeting.name).replace(/'/g, "\\'") + '\\u201d.\', \'success\'); });">+ Add to \u201c' + escapeHtml(activeMeeting.name) + '\u201d</button>';
+  }
   detailHtml += '<button class="edit-quote-btn" style="background:var(--terracotta); color:white; border-color:var(--terracotta);" onclick="event.stopPropagation(); openItemCreation(\'' + entry.id + '\')">Create Item</button>';
   detailHtml += '<button class="edit-quote-btn" onclick="event.stopPropagation(); loadQuoteForEdit(\'' + entry.id + '\')">Edit this quote</button>';
   return detailHtml;
@@ -8553,6 +8707,7 @@ async function renderLog() {
   let list = [];
   try { list = raw ? JSON.parse(raw) : []; } catch (e) { list = []; }
   populateSupplierFilterDropdown(list);
+  const activeMeetingForRow = await getActiveMeeting();
 
   if (list.length === 0) {
     container.innerHTML = '<div class="log-empty"><div class="icon">&#128203;</div>Start your first quote.<br>Saved quotes will show up here.</div>';
@@ -8578,7 +8733,7 @@ async function renderLog() {
 
     const headline = (entry.prices && entry.prices[0]) ? entry.prices[0] : null;
     const cushionPrice = (entry.category === "cushions") ? computeCushionPriceForEntry(entry, getSettings()) : null;
-    const detailHtml = buildQuoteDetailHtml(entry);
+    const detailHtml = buildQuoteDetailHtml(entry, activeMeetingForRow);
     const typeBadgeText = entry.category === "cushions" ? "Cushion" : (entry.curtainType || "");
     let headlineHtml;
     if (headline) {
@@ -8620,10 +8775,11 @@ async function renderLog() {
   container.appendChild(clearBtn);
 
   renderSavedTable();
+  renderGalleryView();
 }
 
 function buildExpandableQuoteRow(entry, idx, rowId) {
-  const detailHtml = buildQuoteDetailHtml(entry);
+  const detailHtml = buildQuoteDetailHtml(entry, null);
   const headline = (entry.prices && entry.prices[0]) ? entry.prices[0] : null;
   const cushionPrice = (!headline && entry.category === "cushions") ? computeCushionPriceForEntry(entry, getSettings()) : null;
   const typeBadgeText = entry.category === "cushions" ? "Cushion" : (entry.curtainType || "");
@@ -8696,6 +8852,7 @@ async function renderSavedTable() {
   const raw = await storageGet("nextex_quotes");
   let list = [];
   try { list = raw ? JSON.parse(raw) : []; } catch (e) { list = []; }
+  const activeMeetingForRow = await getActiveMeeting();
 
   if (list.length === 0) {
     wrap.innerHTML = '<div class="log-empty"><div class="icon">&#128203;</div>Start your first quote.<br>Saved quotes will show up here.</div>';
@@ -8717,7 +8874,7 @@ async function renderSavedTable() {
       ? '<img class="quote-thumb" src="' + entry.photo + '" alt="" style="cursor:pointer;" onclick="event.stopPropagation(); openLightbox(\'' + entry.photo + '\', event)">'
       : '<span class="quote-thumb quote-thumb-empty">&#128247;</span>';
 
-    const detailHtml = buildQuoteDetailHtml(entry);
+    const detailHtml = buildQuoteDetailHtml(entry, activeMeetingForRow);
 
     rows +=
       '<tr class="quote-table-row" data-qid="' + entry.id + '" onclick="toggleTableRow(\'' + entry.id + '\')">' +
