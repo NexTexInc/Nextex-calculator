@@ -3362,9 +3362,12 @@ function compressImageFile(file, maxDim, quality) {
 
 async function handlePhotoSelected(event) {
   const file = event.target.files && event.target.files[0];
+  event.target.value = "";
   if (!file) return;
   try {
-    productPhotoDataUrl = await compressImageFile(file, 1200, 0.85);
+    const cropped = await captureAndCropPhoto(file);
+    if (!cropped) return;
+    productPhotoDataUrl = cropped;
     document.getElementById("photo-placeholder").style.display = "none";
     const previewEl = document.getElementById("photo-preview");
     previewEl.src = productPhotoDataUrl;
@@ -3924,7 +3927,8 @@ async function handleSessionPhotoSelected(event, context) {
   const id = context === "meeting" ? currentMeetingDetailId : currentSourcingDetailId;
   if (!id) return;
   try {
-    const photoDataUrl = await compressImageFile(file, 1200, 0.85);
+    const photoDataUrl = await captureAndCropPhoto(file);
+    if (!photoDataUrl) return;
     const list = await getSessionPhotos();
     const entry = {
       id: "sphoto_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
@@ -4150,26 +4154,25 @@ let itemCreationDesignChoice = "new";
 let itemCreationPiping = "NO";
 let itemCreationPackType = "SINGLE";
 let cropperInstance = null;
-let cropOnConfirmCallback = null;
+let cropResolveCallback = null;
 
-async function openCropModal(dataUrl, onConfirm) {
-  try {
-    await ensureCropperLibLoaded();
-  } catch (e) {
-    showToast("Could not load the crop tool. Check your connection and try again.", "error");
-    onConfirm(dataUrl); // fall back to the uncropped photo rather than blocking the user entirely
-    return;
-  }
-  cropOnConfirmCallback = onConfirm;
-  const img = document.getElementById("crop-target-image");
-  img.src = dataUrl;
-  document.getElementById("crop-overlay").classList.add("show");
-
-  if (img.complete) {
-    startCropper(img);
-  } else {
-    img.onload = function() { startCropper(img); };
-  }
+function openCropModal(dataUrl) {
+  return new Promise(function(resolve) {
+    ensureCropperLibLoaded().then(function() {
+      cropResolveCallback = resolve;
+      const img = document.getElementById("crop-target-image");
+      img.src = dataUrl;
+      document.getElementById("crop-overlay").classList.add("show");
+      if (img.complete) {
+        startCropper(img);
+      } else {
+        img.onload = function() { startCropper(img); };
+      }
+    }).catch(function() {
+      showToast("Could not load the crop tool. Check your connection and try again.", "error");
+      resolve(dataUrl); // fall back to the uncropped photo rather than blocking the user entirely
+    });
+  });
 }
 
 function startCropper(img) {
@@ -4188,15 +4191,25 @@ function confirmCrop() {
   cropperInstance.destroy();
   cropperInstance = null;
   document.getElementById("crop-overlay").classList.remove("show");
-  const cb = cropOnConfirmCallback;
-  cropOnConfirmCallback = null;
-  if (cb) cb(dataUrl);
+  const resolve = cropResolveCallback;
+  cropResolveCallback = null;
+  if (resolve) resolve(dataUrl);
 }
 
 function cancelCrop() {
   if (cropperInstance) { cropperInstance.destroy(); cropperInstance = null; }
   document.getElementById("crop-overlay").classList.remove("show");
-  cropOnConfirmCallback = null;
+  const resolve = cropResolveCallback;
+  cropResolveCallback = null;
+  if (resolve) resolve(null); // null signals "cancelled, don't use this photo"
+}
+
+// Shared by every Take/Upload photo entry point in the app: reads the file,
+// runs it through the crop step, and returns the cropped data URL -- or
+// null if the user cancelled the crop for that photo.
+async function captureAndCropPhoto(file) {
+  const rawDataUrl = await readFileAsDataURL(file);
+  return await openCropModal(rawDataUrl);
 }
 
 let itemCreationCategory = "curtains";
@@ -4230,11 +4243,11 @@ async function handleItemPhotoSelected(event) {
   event.target.value = "";
   if (!file) return;
   try {
-    const rawDataUrl = await readFileAsDataURL(file);
-    await openCropModal(rawDataUrl, function(croppedDataUrl) {
-      itemPhotoDataUrl = croppedDataUrl;
+    const cropped = await captureAndCropPhoto(file);
+    if (cropped) {
+      itemPhotoDataUrl = cropped;
       setItemPhotoPreview(itemPhotoDataUrl);
-    });
+    }
   } catch (e) {
     showToast("Could not process that photo.", "error");
   }
@@ -5271,7 +5284,8 @@ async function handleGalleryUpload(event) {
   let addedCount = 0;
   for (let i = 0; i < files.length; i++) {
     try {
-      const photoDataUrl = await compressImageFile(files[i], 1200, 0.85);
+      const photoDataUrl = await captureAndCropPhoto(files[i]);
+      if (!photoDataUrl) continue; // user cancelled the crop for this one -- skip it, keep going
       list.push({
         id: "sphoto_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
         photo: photoDataUrl,
@@ -5295,7 +5309,8 @@ async function handleGalleryCameraCapture(event) {
   event.target.value = "";
   if (!file) return;
   try {
-    const photoDataUrl = await compressImageFile(file, 1200, 0.85);
+    const photoDataUrl = await captureAndCropPhoto(file);
+    if (!photoDataUrl) return;
     const list = await getSessionPhotos();
     list.push({
       id: "sphoto_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
@@ -6003,7 +6018,8 @@ async function handleCreateAlbumUpload(event) {
   let addedCount = 0;
   for (let i = 0; i < files.length; i++) {
     try {
-      const photoDataUrl = await compressImageFile(files[i], 1200, 0.85);
+      const photoDataUrl = await captureAndCropPhoto(files[i]);
+      if (!photoDataUrl) continue; // user cancelled the crop for this one -- skip it, keep going
       list.push({
         id: "sphoto_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
         photo: photoDataUrl,
