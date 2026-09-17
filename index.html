@@ -1371,6 +1371,11 @@
       <button type="button" class="hamburger-submenu-item" onclick="exportItemMaster()">Export Item Master</button>
       <button type="button" class="hamburger-submenu-item" onclick="openDeletedItemsScreen()">Deleted Items</button>
     </div>
+
+    <button type="button" class="hamburger-menu-item" onclick="runStorageDiagnostics()">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16"></path><path d="M8 20V10"></path><path d="M13 20V4"></path><path d="M18 20v-7"></path></svg>
+      <span style="flex:1;">Storage Check</span>
+    </button>
   </div>
 
   <div class="header">
@@ -2787,6 +2792,135 @@ async function storageDelete(key) {
   } catch (e) {
     return false;
   }
+}
+
+// ---------------------------------------------------------------
+// Storage diagnostics -- read-only usage report + a non-destructive
+// probe for remaining headroom. Never touches real app data: the probe
+// writes only to its own temp key and always deletes it when done,
+// success or failure.
+// ---------------------------------------------------------------
+function approxByteSize(key, value) {
+  // localStorage/window.storage store strings as UTF-16 internally in
+  // most engines -- 2 bytes/char is the standard estimate used for this.
+  return ((key ? key.length : 0) + (value ? value.length : 0)) * 2;
+}
+
+async function collectStorageUsage() {
+  const categories = {
+    "Quote photos": 0, "Quote data": 0,
+    "Gallery/Meeting/Sourcing photos": 0, "Photo index data": 0,
+    "Suppliers": 0, "Items database": 0, "Meetings/Sourcing": 0, "Other": 0
+  };
+  const counts = { "Quote photos": 0, "Gallery/Meeting/Sourcing photos": 0 };
+  let totalBytes = 0;
+  let keys = [];
+
+  if (HAS_CLAUDE_STORAGE) {
+    try {
+      const listed = await window.storage.list(undefined, false);
+      keys = (listed && listed.keys) || [];
+    } catch (e) { keys = []; }
+  } else {
+    try { keys = Object.keys(window.localStorage); } catch (e) { keys = []; }
+  }
+
+  for (const key of keys) {
+    let value = null;
+    try {
+      value = HAS_CLAUDE_STORAGE ? (await storageGet(key)) : window.localStorage.getItem(key);
+    } catch (e) { value = null; }
+    const size = approxByteSize(key, value);
+    totalBytes += size;
+
+    if (key.indexOf("nextex_quote_photo_") === 0) { categories["Quote photos"] += size; counts["Quote photos"]++; }
+    else if (key === "nextex_quotes_index" || key === "nextex_quotes") { categories["Quote data"] += size; }
+    else if (key.indexOf("nextex_photo_") === 0) { categories["Gallery/Meeting/Sourcing photos"] += size; counts["Gallery/Meeting/Sourcing photos"]++; }
+    else if (key === "nextex_session_photos_index" || key === "nextex_session_photos") { categories["Photo index data"] += size; }
+    else if (key.indexOf("nextex_supplier") === 0) { categories["Suppliers"] += size; }
+    else if (key.indexOf("nextex_item") === 0) { categories["Items database"] += size; }
+    else if (key.indexOf("nextex_meeting") === 0 || key.indexOf("nextex_sourcing") === 0) { categories["Meetings/Sourcing"] += size; }
+    else { categories["Other"] += size; }
+  }
+
+  return { totalBytes, categories, counts, keyCount: keys.length };
+}
+
+// Non-destructive: writes increasing amounts of throwaway data to ONE
+// temp key (never a real app key), stops the moment a write fails or a
+// safe ceiling is reached, then deletes the temp key either way.
+async function probeRemainingCapacity() {
+  const probeKey = "nextex_diag_probe_temp";
+  const stepBytes = 250 * 1024; // 250KB steps
+  const safetyCapBytes = 20 * 1024 * 1024; // stop probing past 20MB either way
+  let lastGoodBytes = 0;
+  let hitLimit = false;
+
+  try {
+    for (let target = stepBytes; target <= safetyCapBytes; target += stepBytes) {
+      const chunk = "x".repeat(Math.floor(target / 2)); // ~2 bytes/char
+      let ok;
+      try {
+        ok = await storageSet(probeKey, chunk);
+      } catch (e) {
+        ok = false;
+      }
+      if (!ok) { hitLimit = true; break; }
+      lastGoodBytes = target;
+    }
+  } finally {
+    try { await storageDelete(probeKey); } catch (e) { /* best effort cleanup */ }
+  }
+
+  return { headroomBytes: lastGoodBytes, hitLimit };
+}
+
+function formatBytes(b) {
+  if (b >= 1024 * 1024) return (b / (1024 * 1024)).toFixed(2) + " MB";
+  if (b >= 1024) return (b / 1024).toFixed(0) + " KB";
+  return b + " B";
+}
+
+async function runStorageDiagnostics() {
+  showToast("Checking storage usage\u2026", "success");
+  const usage = await collectStorageUsage();
+
+  showToast("Testing remaining headroom\u2026 (no data will be changed)", "success");
+  const probe = await probeRemainingCapacity();
+
+  const totalQuoteMB = usage.categories["Quote photos"] + usage.categories["Quote data"];
+  const totalGalleryMB = usage.categories["Gallery/Meeting/Sourcing photos"] + usage.categories["Photo index data"];
+  const avgQuotePhoto = usage.counts["Quote photos"] > 0 ? usage.categories["Quote photos"] / usage.counts["Quote photos"] : 0;
+  const avgGalleryPhoto = usage.counts["Gallery/Meeting/Sourcing photos"] > 0 ? usage.categories["Gallery/Meeting/Sourcing photos"] / usage.counts["Gallery/Meeting/Sourcing photos"] : 0;
+  const avgPhoto = (avgQuotePhoto + avgGalleryPhoto) > 0
+    ? ((avgQuotePhoto * usage.counts["Quote photos"]) + (avgGalleryPhoto * usage.counts["Gallery/Meeting/Sourcing photos"])) /
+      Math.max(1, usage.counts["Quote photos"] + usage.counts["Gallery/Meeting/Sourcing photos"])
+    : 0;
+  const roughPhotosLeft = avgPhoto > 0 ? Math.floor(probe.headroomBytes / avgPhoto) : null;
+
+  const lines = [];
+  lines.push("STORAGE CHECK (" + (HAS_CLAUDE_STORAGE ? "Claude storage" : "browser localStorage") + ")");
+  lines.push("");
+  lines.push("Currently used: " + formatBytes(usage.totalBytes) + " across " + usage.keyCount + " keys");
+  lines.push("- Quote photos: " + formatBytes(usage.categories["Quote photos"]) + " (" + usage.counts["Quote photos"] + " photos)");
+  lines.push("- Quote data (no photos): " + formatBytes(usage.categories["Quote data"]));
+  lines.push("- Gallery/Meeting/Sourcing photos: " + formatBytes(usage.categories["Gallery/Meeting/Sourcing photos"]) + " (" + usage.counts["Gallery/Meeting/Sourcing photos"] + " photos)");
+  lines.push("- Suppliers: " + formatBytes(usage.categories["Suppliers"]));
+  lines.push("- Items database: " + formatBytes(usage.categories["Items database"]));
+  lines.push("- Meetings/Sourcing (text): " + formatBytes(usage.categories["Meetings/Sourcing"]));
+  lines.push("- Other: " + formatBytes(usage.categories["Other"]));
+  lines.push("");
+  if (probe.hitLimit) {
+    lines.push("Remaining headroom: ~" + formatBytes(probe.headroomBytes) + " before a save fails.");
+    lines.push("Estimated total capacity: ~" + formatBytes(usage.totalBytes + probe.headroomBytes));
+  } else {
+    lines.push("No limit hit after testing up to 20MB of additional headroom -- this device/browser allows considerably more than a typical 5-10MB mobile ceiling.");
+  }
+  if (roughPhotosLeft !== null) {
+    lines.push("At your current average photo size (~" + formatBytes(avgPhoto) + "), that's roughly " + roughPhotosLeft + " more photos before you'd hit it.");
+  }
+
+  alert(lines.join("\n"));
 }
 
 // ---------------------------------------------------------------
