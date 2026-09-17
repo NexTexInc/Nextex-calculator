@@ -924,7 +924,7 @@
     transition: bottom 0.25s ease;
   }
   .confirm-banner.show { bottom: 78px; }
-  .confirm-message { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 12px; text-align: center; }
+  .confirm-message { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 12px; text-align: center; white-space: pre-wrap; }
   .confirm-actions { display: flex; gap: 8px; justify-content: center; }
 
   .note-field textarea {
@@ -1380,6 +1380,15 @@
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>
       <span style="flex:1;">Inspect Quotes Storage</span>
     </button>
+    <button type="button" class="hamburger-menu-item" onclick="exportFullBackup()">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+      <span style="flex:1;">Export Backup</span>
+    </button>
+    <button type="button" class="hamburger-menu-item" onclick="triggerImportBackup()">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+      <span style="flex:1;">Import Backup</span>
+    </button>
+    <input type="file" id="backup-import-input" accept="application/json,.json" style="display:none;" onchange="handleImportBackupFile(event)">
   </div>
 
   <div class="header">
@@ -4481,6 +4490,164 @@ function clearPendingSupplierPhoto() {
 // Item Creation / Database -- formalizes a confirmed quote into an
 // official Item record with a permanent Item # and Design #.
 // ---------------------------------------------------------------
+// ---------------------------------------------------------------
+// Full data backup: export everything to a downloadable JSON file,
+// and import/merge a previously exported file back in. This is a
+// real off-device copy -- unlike localStorage, it can't be silently
+// wiped by a storage bug, a full quota, or clearing site data.
+// ---------------------------------------------------------------
+async function buildFullBackup() {
+  const rawSuppliers = await storageGet("nextex_suppliers");
+  const rawCustomerCart = await storageGet("nextex_customer_cart");
+  let suppliers = [], customerCart = [];
+  try { suppliers = rawSuppliers ? JSON.parse(rawSuppliers) : []; } catch (e) { suppliers = []; }
+  try { customerCart = rawCustomerCart ? JSON.parse(rawCustomerCart) : []; } catch (e) { customerCart = []; }
+
+  return {
+    app: "NexTex Calculator",
+    exportedAt: new Date().toISOString(),
+    version: 1,
+    data: {
+      quotes: await getQuotes(),
+      suppliers: suppliers,
+      items: await getItems(),
+      deletedItems: await getDeletedItems(),
+      meetings: await getMeetings(),
+      sourcing: await getSourcingList(),
+      sessionPhotos: await getSessionPhotos(),
+      albums: await getAlbums(),
+      customerCart: customerCart
+    }
+  };
+}
+
+function downloadTextFile(filename, text, mimeType) {
+  const blob = new Blob([text], { type: mimeType || "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
+}
+
+async function exportFullBackup() {
+  showToast("Building backup\u2026", "success");
+  const backup = await buildFullBackup();
+  const d = backup.data;
+  const dateStr = new Date().toISOString().slice(0, 10);
+  downloadTextFile("nextex_backup_" + dateStr + ".json", JSON.stringify(backup, null, 2));
+  await storageSet("nextex_last_backup_at", backup.exportedAt);
+  const summary = [
+    "Backup downloaded.",
+    d.quotes.length + " quotes, " + d.suppliers.length + " suppliers, " + d.items.length + " items,",
+    d.meetings.length + " meetings, " + d.sourcing.length + " sourcing, " + d.sessionPhotos.length + " gallery photos."
+  ].join(" ");
+  showToast(summary, "success");
+}
+
+function triggerImportBackup() {
+  document.getElementById("backup-import-input").click();
+}
+
+// Merge by id: never overwrites an existing local record on a matching
+// id -- only adds imported records whose id isn't already present. This
+// makes import safe to run repeatedly without duplicating or clobbering
+// anything already in the app.
+function mergeById(currentList, importedList, idField) {
+  idField = idField || "id";
+  const existingIds = new Set((currentList || []).map(function(e) { return e[idField]; }));
+  const toAdd = (importedList || []).filter(function(e) { return e && !existingIds.has(e[idField]); });
+  return { merged: (currentList || []).concat(toAdd), addedCount: toAdd.length };
+}
+
+async function handleImportBackupFile(event) {
+  const file = event.target.files && event.target.files[0];
+  event.target.value = "";
+  if (!file) return;
+
+  let backup;
+  try {
+    const text = await file.text();
+    backup = JSON.parse(text);
+  } catch (e) {
+    showToast("Could not read that file \u2014 is it a NexTex backup JSON file?", "error");
+    return;
+  }
+  if (!backup || !backup.data || typeof backup.data !== "object") {
+    showToast("That file doesn't look like a NexTex backup.", "error");
+    return;
+  }
+  const d = backup.data;
+  const exportedLabel = backup.exportedAt ? new Date(backup.exportedAt).toLocaleString() : "unknown date";
+
+  showConfirm(
+    "Import backup from " + exportedLabel + "?\n\nContains: " + (d.quotes || []).length + " quotes, " +
+    (d.suppliers || []).length + " suppliers, " + (d.items || []).length + " items, " +
+    (d.meetings || []).length + " meetings, " + (d.sourcing || []).length + " sourcing, " +
+    (d.sessionPhotos || []).length + " gallery photos.\n\nThis MERGES into your current data \u2014 " +
+    "anything already here is kept as-is, and only records not already present (by their original ID) are added. Nothing existing will be overwritten or deleted.",
+    async function() {
+      showToast("Importing\u2026", "success");
+      const results = [];
+
+      if (Array.isArray(d.quotes)) {
+        const r = mergeById(await getQuotes(), d.quotes);
+        await saveQuotes(r.merged);
+        results.push(r.addedCount + " quotes");
+      }
+      if (Array.isArray(d.suppliers)) {
+        const currentRaw = await storageGet("nextex_suppliers");
+        let current = [];
+        try { current = currentRaw ? JSON.parse(currentRaw) : []; } catch (e) { current = []; }
+        const r = mergeById(current, d.suppliers);
+        await storageSet("nextex_suppliers", JSON.stringify(r.merged));
+        results.push(r.addedCount + " suppliers");
+      }
+      if (Array.isArray(d.items)) {
+        const r = mergeById(await getItems(), d.items);
+        await saveItems(r.merged);
+        results.push(r.addedCount + " items");
+      }
+      if (Array.isArray(d.deletedItems)) {
+        const r = mergeById(await getDeletedItems(), d.deletedItems);
+        await saveDeletedItems(r.merged);
+      }
+      if (Array.isArray(d.meetings)) {
+        const r = mergeById(await getMeetings(), d.meetings);
+        await saveMeetings(r.merged);
+        results.push(r.addedCount + " meetings");
+      }
+      if (Array.isArray(d.sourcing)) {
+        const r = mergeById(await getSourcingList(), d.sourcing);
+        await saveSourcingList(r.merged);
+        results.push(r.addedCount + " sourcing entries");
+      }
+      if (Array.isArray(d.sessionPhotos)) {
+        const r = mergeById(await getSessionPhotos(), d.sessionPhotos);
+        await saveSessionPhotos(r.merged);
+        results.push(r.addedCount + " gallery photos");
+      }
+      if (Array.isArray(d.albums)) {
+        const r = mergeById(await getAlbums(), d.albums);
+        await saveAlbums(r.merged);
+      }
+      if (Array.isArray(d.customerCart)) {
+        const currentRaw = await storageGet("nextex_customer_cart");
+        let current = [];
+        try { current = currentRaw ? JSON.parse(currentRaw) : []; } catch (e) { current = []; }
+        const r = mergeById(current, d.customerCart, "key");
+        await storageSet("nextex_customer_cart", JSON.stringify(r.merged));
+      }
+
+      showToast("Import complete: added " + results.join(", ") + ".", "success");
+      renderLog();
+    }
+  );
+}
+
 async function getItems() {
   const raw = await storageGet("nextex_items");
   try { return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
@@ -5557,30 +5724,31 @@ async function exportStickerSheetPDF() {
 
   showToast("Building Sticker Sheet\u2026", "success");
 
-  // Measurements cross-checked directly against Avery's own production PDF
-  // template (vector rectangle coordinates extracted from its content
-  // stream) rather than relying solely on the Word template's XML -- the
-  // Word doc's left margin turned out to be off by ~6pt from the real PDF.
-  const twipsToPt = function(twips) { return twips / 20; };
-  const PAGE_W = twipsToPt(12240);    // 8.5in
-  const PAGE_H = twipsToPt(15840);    // 11in
-  const MARGIN_TOP = 36;              // confirmed exact match to Avery's PDF
-  const MARGIN_LEFT = 56.15;          // Avery's PDF box left edge, not the Word doc's 62.4
-  const CELL_W = 108;                 // 1.5in, confirmed exact match
-  const CELL_H = 108;                 // 1.5in, confirmed exact match
-  const H_GAP = 22.55;                // confirmed exact match
-  const V_GAP = 14.4;                 // confirmed exact match
-  const COLS = 4;
-  const ROWS = 6;
+  // Measurements cross-checked directly against the 1"x1" label PDF template
+  // (theshippingstore.com S001 / SI-LABEL-LS-0101) -- vector curve coordinates
+  // extracted from its content stream, not eyeballed from the Word/preview
+  // rendering. This is the standard label size going forward (the earlier
+  // 1.5" Avery layout was a temporary trial only).
+  const PAGE_W = 612;                 // 8.5in
+  const PAGE_H = 792;                 // 11in
+  const MARGIN_TOP = 35.62;           // confirmed exact match to the label PDF
+  const MARGIN_LEFT = 26.68;          // confirmed exact match to the label PDF
+  const CELL_W = 72;                  // 1.0in, confirmed exact match
+  const CELL_H = 72;                  // 1.0in, confirmed exact match
+  const H_GAP = 9;                    // 1.125in pitch - 1.0in cell, confirmed exact match
+  const V_GAP = 9;                    // 1.125in pitch - 1.0in cell, confirmed exact match
+  const COLS = 7;
+  const ROWS = 9;
   const PER_PAGE = COLS * ROWS;
 
-  // QR and caption sized with real clearance from the cell's own top edge --
-  // the previous 4pt gap left almost no tolerance for a printer's natural
-  // feed drift, which accumulates going down the page and would crop the
-  // QR's top edge worst on the bottom rows, exactly as reported.
-  const QR_SIZE = 78;
-  const CAPTION_FONT_SIZE = 9;
-  const TOP_CLEARANCE = 9;
+  // QR and caption scaled down proportionally from the proven 1.5in layout
+  // (same fill ratio and top clearance relative to cell size, which is what
+  // gave that layout its tolerance for printer feed drift) rather than
+  // picked freehand for the smaller cell.
+  const QR_SIZE = 52;
+  const CAPTION_FONT_SIZE = 6;
+  const TOP_CLEARANCE = 6;
+  const CAPTION_GAP = 3;
 
   const pdfDoc = await window.PDFLib.PDFDocument.create();
   const font = await pdfDoc.embedFont(window.PDFLib.StandardFonts.Helvetica);
@@ -5611,7 +5779,7 @@ async function exportStickerSheetPDF() {
         const caption = String(entry.item);
         const textWidth = font.widthOfTextAtSize(caption, CAPTION_FONT_SIZE);
         const textX = cellX + (CELL_W - textWidth) / 2;
-        const textY = qrY - CAPTION_FONT_SIZE - 4;
+        const textY = qrY - CAPTION_FONT_SIZE - CAPTION_GAP;
         page.drawText(caption, { x: Math.max(textX, cellX), y: textY, size: CAPTION_FONT_SIZE, font: font });
       } catch (e) {
         // If a single quote's QR fails to generate, skip just that label
@@ -10068,6 +10236,44 @@ function showScreen(name) {
 }
 
 // ---------------------------------------------------------------
+// Backup reminder: nudges toward Export Backup if it's been a while,
+// but only when there's actually something worth backing up, and
+// never more than once per day so it doesn't nag.
+// ---------------------------------------------------------------
+const BACKUP_REMINDER_DAYS = 7;
+const BACKUP_REMINDER_COOLDOWN_DAYS = 1;
+
+function daysSinceIso(iso) {
+  if (!iso) return Infinity;
+  const t = new Date(iso).getTime();
+  if (isNaN(t)) return Infinity;
+  return (Date.now() - t) / (1000 * 60 * 60 * 24);
+}
+
+async function checkBackupReminder() {
+  const lastBackupRaw = await storageGet("nextex_last_backup_at");
+  const sinceBackup = daysSinceIso(lastBackupRaw);
+  if (sinceBackup < BACKUP_REMINDER_DAYS) return;
+
+  const lastReminderRaw = await storageGet("nextex_last_backup_reminder_shown_at");
+  if (daysSinceIso(lastReminderRaw) < BACKUP_REMINDER_COOLDOWN_DAYS) return;
+
+  // Don't nag an empty/fresh install with nothing worth backing up yet.
+  const [quotes, items, sessionPhotos] = await Promise.all([getQuotes(), getItems(), getSessionPhotos()]);
+  if (quotes.length === 0 && items.length === 0 && sessionPhotos.length === 0) return;
+
+  await storageSet("nextex_last_backup_reminder_shown_at", new Date().toISOString());
+
+  const message = lastBackupRaw
+    ? "It's been " + Math.floor(sinceBackup) + " days since your last backup (" +
+      quotes.length + " quotes, " + items.length + " items, " + sessionPhotos.length + " photos currently saved). Export one now?"
+    : "You haven't exported a backup yet (" + quotes.length + " quotes, " + items.length +
+      " items, " + sessionPhotos.length + " photos currently saved). Export one now?";
+
+  showConfirm(message, function() { exportFullBackup(); });
+}
+
+// ---------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------
 (async function init() {
@@ -10083,6 +10289,7 @@ function showScreen(name) {
   renderPriceCards();
   renderCushionPrice();
   renderLog();
+  setTimeout(function() { checkBackupReminder(); }, 1200);
 })();
 </script>
 </body>
