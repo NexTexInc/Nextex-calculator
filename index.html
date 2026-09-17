@@ -1112,6 +1112,10 @@
     cursor: pointer;
   }
   .quote-num { font-size: 11px; font-weight: 700; color: var(--text-secondary); width: 18px; flex-shrink: 0; }
+  .quote-select-checkbox { width: 17px; height: 17px; flex-shrink: 0; cursor: pointer; margin: 0; }
+  .selection-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: var(--pair-bg); border: 1.5px solid var(--terracotta); border-radius: 10px; padding: 8px 12px; margin-bottom: 10px; }
+  .selection-toolbar .sel-count { font-size: 12.5px; font-weight: 700; color: var(--terracotta-dark); flex: 1; }
+  .selection-toolbar button { flex-shrink: 0; }
   .quote-thumb { width: 34px; height: 34px; border-radius: 8px; object-fit: cover; flex-shrink: 0; }
   .gallery-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .gallery-card {
@@ -1155,7 +1159,7 @@
     cursor: pointer;
   }
   .quote-id-block { flex: 1; min-width: 0; }
-  .quote-style { font-size: 13px; font-weight: 700; color: var(--navy); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .quote-style { font-size: 13px; font-weight: 700; color: var(--navy); white-space: normal; overflow-wrap: break-word; }
   .quote-vendor { font-size: 12px; color: var(--terracotta-dark); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .type-badge { display: inline-block; background: var(--pair-bg); color: var(--terracotta-dark); font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 10px; margin-left: 6px; vertical-align: middle; }
   .quote-headline { text-align: right; flex-shrink: 0; }
@@ -1996,6 +2000,8 @@
       </div>
 
       <div id="vendor-filter-chip" style="display:none; margin-bottom:10px;"></div>
+
+      <div id="quote-selection-toolbar" style="display:none;"></div>
 
       <div id="log-list"></div>
       <div id="saved-table-wrap" style="display:none;"></div>
@@ -5575,8 +5581,9 @@ async function exportSavedQuotesWithQR() {
   }
 
   let quotes = await getQuotes();
+  quotes = getExportQuoteList(quotes);
   if (quotes.length === 0) {
-    showToast("No saved quotes yet.", "error");
+    showToast(selectedQuoteIds.size > 0 ? "No selected quotes to export." : (savedVendorFilter ? "No saved quotes for this supplier filter." : "No saved quotes yet."), "error");
     return;
   }
 
@@ -5586,13 +5593,14 @@ async function exportSavedQuotesWithQR() {
   const sheet = workbook.addWorksheet("Quote Sheet");
 
   const headers = [
-    "QR Code", "Item #", "Vendor", "Customer", "Category", "Size", "Cost (USD)", "Date", "Notes"
+    "QR Code", "Item #", "Vendor", "Customer", "Category", "Size", "Fabric Cost (USD)", "Cost (USD)", "Date", "Notes"
   ];
   const QR_COL_WIDTH_CHARS = 14;
   const QR_ROW_HEIGHT_POINTS = 78;
   const QR_CELL_PX = 103;
   const QR_IMAGE_PX = 85;
   const QR_CENTER_OFFSET = (QR_CELL_PX - QR_IMAGE_PX) / 2 / QR_CELL_PX;
+  const CURRENCY_FMT = '"$"#,##0.00';
 
   headers.forEach(function(h, i) {
     sheet.getColumn(i + 1).width = i === 0 ? QR_COL_WIDTH_CHARS : (h === "Notes" ? 40 : 20);
@@ -5621,6 +5629,8 @@ async function exportSavedQuotesWithQR() {
 
   const THIN_BORDER = { style: "thin" };
   const settingsForExport = getSettings();
+  const FABRIC_COST_COL = 7;
+  const COST_COL = 8;
 
   for (let i = 0; i < quotes.length; i++) {
     const entry = quotes[i];
@@ -5637,17 +5647,22 @@ async function exportSavedQuotesWithQR() {
       sizeLabel = CUSHION_SIZE_LABELS[entry.cushionSize] || entry.cushionSize || "";
       costVal = cushionPrice.usd;
     }
+    // The root fabric cost per meter -- the raw-material figure the
+    // finished curtain/cushion cost above is actually built from.
+    const fabricCostVal = (typeof entry.fabricPrice === "number" && entry.fabricPrice > 0) ? entry.fabricPrice : null;
 
     sheet.getRow(rowIdx).values = [
       "", entry.item || "", entry.vendor || "", entry.customer || "",
       entry.category === "cushions" ? "Cushions" : "Curtains",
-      sizeLabel, costVal, entry.date || "", entry.notes || ""
+      sizeLabel, fabricCostVal, costVal, entry.date || "", entry.notes || ""
     ];
     sheet.getRow(rowIdx).height = QR_ROW_HEIGHT_POINTS;
     sheet.getRow(rowIdx).eachCell({ includeEmpty: true }, function(cell) {
       cell.alignment = { horizontal: "center", vertical: "middle" };
       cell.border = { top: THIN_BORDER, bottom: THIN_BORDER, left: THIN_BORDER, right: THIN_BORDER };
     });
+    sheet.getCell(rowIdx, FABRIC_COST_COL).numFmt = CURRENCY_FMT;
+    sheet.getCell(rowIdx, COST_COL).numFmt = CURRENCY_FMT;
 
     if (entry.item) {
       try {
@@ -5671,8 +5686,9 @@ async function exportSavedQuotesWithQR() {
   const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
+  const filenameBase = selectedQuoteIds.size > 0 ? "Selected" : (savedVendorFilter ? savedVendorFilter.replace(/[^a-z0-9\-_ ]/gi, "").trim().replace(/\s+/g, "_") : "All");
   link.href = url;
-  link.download = "NexTex_Quote_Sheet_" + new Date().toISOString().slice(0, 10) + ".xlsx";
+  link.download = "NexTex_" + filenameBase + "_Quote_Sheet_" + new Date().toISOString().slice(0, 10) + ".xlsx";
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -5716,9 +5732,9 @@ async function exportStickerSheetPDF() {
   }
 
   let quotes = await getQuotes();
-  quotes = quotes.filter(function(q) { return q.item; });
+  quotes = getExportQuoteList(quotes).filter(function(q) { return q.item; });
   if (quotes.length === 0) {
-    showToast("No saved quotes with an item # yet.", "error");
+    showToast(selectedQuoteIds.size > 0 ? "No selected quotes with an item # to export." : (savedVendorFilter ? "No saved quotes with an item # for this supplier filter." : "No saved quotes with an item # yet."), "error");
     return;
   }
 
@@ -5793,7 +5809,8 @@ async function exportStickerSheetPDF() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = "NexTex_Sticker_Sheet_" + new Date().toISOString().slice(0, 10) + ".pdf";
+  const filenameBase = selectedQuoteIds.size > 0 ? "Selected" : (savedVendorFilter ? savedVendorFilter.replace(/[^a-z0-9\-_ ]/gi, "").trim().replace(/\s+/g, "_") : "All");
+  link.download = "NexTex_" + filenameBase + "_Sticker_Sheet_" + new Date().toISOString().slice(0, 10) + ".pdf";
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -8658,6 +8675,7 @@ let savedFilterType = null; // null | "msrp" | "usd"
 let savedVendorFilter = null; // set when jumping in from a supplier's "View quotes"
 let savedCategoryFilter = null; // null | "curtains" | "cushions"
 let savedFabricTypeFilter = ""; // "" = all, else a fabric type string
+let selectedQuoteIds = new Set(); // top-level checkbox selection in the Saved Quotes list
 
 function toggleSortFilter() {
   const panel = document.getElementById("sort-filter-panel");
@@ -9308,11 +9326,18 @@ function csvEscape(val) {
 }
 
 function buildQuotesCsv(list) {
-  const headers = ["Date", "Category", "Vendor", "Item / Style #", "Curtain Type", "Size", "Pair", "Price USD", "Landed CAD", "Sell CAD", "MSRP CAD", "Notes"];
+  const headers = ["Date", "Category", "Vendor", "Item / Style #", "Curtain Type", "Size", "Pair", "Fabric Cost USD", "Price USD", "Landed CAD", "Sell CAD", "MSRP CAD", "Notes"];
   const rows = [headers.map(csvEscape).join(",")];
+  // Prefixing with "$" isn't just cosmetic here -- Excel and Sheets both
+  // parse a "$"-led CSV cell as a real currency-formatted number on open,
+  // not as text, so this is the CSV equivalent of a currency number format.
+  const money = function(n) { return (typeof n === "number" && !isNaN(n)) ? "$" + n.toFixed(2) : ""; };
 
   list.forEach(function(entry) {
     const category = entry.category === "cushions" ? "Cushion" : "Curtain";
+    // The root fabric cost per meter -- the raw-material figure every
+    // finished price below is actually built from.
+    const fabricCostStr = money((typeof entry.fabricPrice === "number" && entry.fabricPrice > 0) ? entry.fabricPrice : null);
     if (!entry.prices || entry.prices.length === 0) {
       rows.push([
         entry.date || "",
@@ -9322,6 +9347,7 @@ function buildQuotesCsv(list) {
         entry.curtainType || "",
         "(pricing not yet configured)",
         "",
+        fabricCostStr,
         "", "", "", "",
         entry.notes || ""
       ].map(csvEscape).join(","));
@@ -9336,10 +9362,11 @@ function buildQuotesCsv(list) {
         entry.curtainType || "",
         p.label,
         p.pair ? "Yes" : "No",
-        p.usd.toFixed(2),
-        p.landed.toFixed(2),
-        p.sell.toFixed(2),
-        p.msrp.toFixed(2),
+        fabricCostStr,
+        money(p.usd),
+        money(p.landed),
+        money(p.sell),
+        money(p.msrp),
         entry.notes || ""
       ].map(csvEscape).join(","));
     });
@@ -9367,14 +9394,14 @@ function triggerCsvDownload(filenameBase, csvString) {
 async function downloadSavedQuotesCsv() {
   let list = await getQuotes();
 
-  const filtered = sortAndFilterQuotes(list);
+  const filtered = getExportQuoteList(list);
   if (filtered.length === 0) {
-    showToast("No saved quotes to download.", "error");
+    showToast(selectedQuoteIds.size > 0 ? "No selected quotes to download." : "No saved quotes to download.", "error");
     return;
   }
 
   const csv = buildQuotesCsv(filtered);
-  triggerCsvDownload(savedVendorFilter ? savedVendorFilter + "_Quotes" : "All_Quotes", csv);
+  triggerCsvDownload(selectedQuoteIds.size > 0 ? "Selected_Quotes" : (savedVendorFilter ? savedVendorFilter + "_Quotes" : "All_Quotes"), csv);
   showToast("CSV downloaded.", "success");
 }
 
@@ -9490,6 +9517,127 @@ function sortAndFilterQuotes(list) {
     if (bi) return 1;
     return 0;
   });
+}
+
+// ---------------------------------------------------------------
+// Top-level quote selection (checkboxes in the Saved Quotes list) --
+// scopes the three downloads to just the checked quotes, and lets
+// several be added to the customer quote in one action instead of
+// one at a time.
+// ---------------------------------------------------------------
+function getExportQuoteList(list) {
+  const filtered = sortAndFilterQuotes(list);
+  if (selectedQuoteIds.size === 0) return filtered;
+  return filtered.filter(function(entry) { return selectedQuoteIds.has(entry.id); });
+}
+
+function toggleQuoteSelection(id, checked) {
+  if (checked) selectedQuoteIds.add(id); else selectedQuoteIds.delete(id);
+  renderSelectionToolbar();
+}
+
+function clearQuoteSelection() {
+  selectedQuoteIds.clear();
+  document.querySelectorAll(".quote-select-checkbox").forEach(function(cb) { cb.checked = false; });
+  renderSelectionToolbar();
+}
+
+function renderSelectionToolbar() {
+  const el = document.getElementById("quote-selection-toolbar");
+  if (!el) return;
+  const n = selectedQuoteIds.size;
+  if (n === 0) {
+    el.style.display = "none";
+    el.innerHTML = "";
+    return;
+  }
+  el.style.display = "";
+  el.innerHTML =
+    '<div class="selection-toolbar">' +
+      '<span class="sel-count">' + n + ' selected \u2014 downloads and Add to Customer Quote below will use just these</span>' +
+      '<button type="button" class="chip" onclick="bulkAddSelectedQuotesToCustomerQuote()">Add to Customer Quote</button>' +
+      '<button type="button" class="chip" onclick="clearQuoteSelection()">Clear</button>' +
+    '</div>';
+}
+
+async function bulkAddSelectedQuotesToCustomerQuote() {
+  if (selectedQuoteIds.size === 0) {
+    showToast("No quotes selected.", "error");
+    return;
+  }
+
+  const quotes = await getQuotes();
+  const s = getSettings();
+  const newKeys = [];
+  let addedCount = 0;
+  let skippedCount = 0;
+
+  selectedQuoteIds.forEach(function(id) {
+    const entry = quotes.find(function(q) { return q.id === id; });
+    if (!entry) { skippedCount++; return; }
+
+    const headline = (entry.prices && entry.prices[0]) ? entry.prices[0] : null;
+    const cushionPrice = (!headline && entry.category === "cushions") ? computeCushionPriceForEntry(entry, s) : null;
+    let sizeLabel = "";
+    let sellPrice = null;
+    let pair = false;
+    if (headline) {
+      sizeLabel = headline.label;
+      sellPrice = headline.sell;
+      pair = !!headline.pair;
+    } else if (cushionPrice) {
+      sizeLabel = CUSHION_SIZE_LABELS[entry.cushionSize] || entry.cushionSize || "";
+      sellPrice = cushionPrice.sell;
+    }
+    if (sellPrice === null || typeof sellPrice !== "number") { skippedCount++; return; }
+
+    const cartKey = "calc_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
+    customerCart.push({
+      key: cartKey,
+      item: entry.item || "(no item #)",
+      vendor: (entry.vendor && entry.vendor !== "(no vendor)") ? entry.vendor : "",
+      category: entry.category === "cushions" ? "Cushion" : "Curtain",
+      sizeLabel: sizeLabel + (pair ? " (pair)" : ""),
+      sellPrice: sellPrice,
+      qty: 1
+    });
+    newKeys.push(cartKey);
+    addedCount++;
+  });
+
+  if (addedCount > 0) {
+    await saveCart();
+  }
+  updateCartBadge();
+
+  let summary = addedCount + " quote" + (addedCount === 1 ? "" : "s") + " added to the customer quote.";
+  if (skippedCount > 0) summary += " " + skippedCount + " skipped (no pricing yet).";
+  showToast(summary, addedCount > 0 ? "success" : "error");
+
+  clearQuoteSelection();
+  renderLog();
+
+  if (newKeys.length === 0) return;
+
+  // Offer to tag the whole batch to an active meeting/sourcing session at
+  // once, rather than prompting once per item like the single-add flow does.
+  const activeMeetingForTag = await getActiveMeeting();
+  const activeSourcingForTag = await getActiveSourcing();
+  function maybePromptSourcing() {
+    if (activeSourcingForTag) {
+      showConfirm("Also add these " + newKeys.length + " to \u201c" + activeSourcingForTag.name + "\u201d?", async function() {
+        for (const k of newKeys) { await tagCartItemToSourcing(k, activeSourcingForTag.id); }
+      });
+    }
+  }
+  if (activeMeetingForTag) {
+    showConfirm("Also add these " + newKeys.length + " to \u201c" + activeMeetingForTag.name + "\u201d?", async function() {
+      for (const k of newKeys) { await tagCartItemToMeeting(k, activeMeetingForTag.id); }
+      maybePromptSourcing();
+    }, maybePromptSourcing);
+  } else {
+    maybePromptSourcing();
+  }
 }
 
 function computeCushionPriceForEntry(entry, s) {
@@ -9623,6 +9771,11 @@ async function renderLog() {
   populateSupplierFilterDropdown(list);
   const activeMeetingForRow = await getActiveMeeting();
 
+  // Drop any selected ids that no longer exist (e.g. the quote was deleted).
+  const liveIds = new Set(list.map(function(e) { return e.id; }));
+  selectedQuoteIds.forEach(function(id) { if (!liveIds.has(id)) selectedQuoteIds.delete(id); });
+  renderSelectionToolbar();
+
   if (list.length === 0) {
     container.innerHTML = '<div class="log-empty"><div class="icon">&#128203;</div>Start your first quote.<br>Saved quotes will show up here.</div>';
     renderSavedTable();
@@ -9664,6 +9817,7 @@ async function renderLog() {
 
     row.innerHTML =
       '<div class="quote-main-line" onclick="toggleQuoteRow(\'' + entry.id + '\')">' +
+        '<input type="checkbox" class="quote-select-checkbox" data-id="' + attrSafe(entry.id) + '" ' + (selectedQuoteIds.has(entry.id) ? "checked" : "") + ' onclick="event.stopPropagation();" onchange="toggleQuoteSelection(\'' + entry.id + '\', this.checked)">' +
         '<span class="quote-num">' + (idx + 1) + '</span>' +
         thumbHtml +
         '<span class="quote-chevron">&#9656;</span>' +
