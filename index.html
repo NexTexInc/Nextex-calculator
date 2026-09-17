@@ -890,6 +890,20 @@
     padding: 20px;
   }
   .qr-code-overlay.show { display: flex; }
+  .bulk-cush-card {
+    background: white;
+    border-radius: 16px;
+    padding: 20px;
+    max-width: 440px;
+    width: 100%;
+    max-height: 86vh;
+    overflow-y: auto;
+    text-align: left;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  }
+  .bulk-cush-card .modal-title { font-size: 16px; font-weight: 800; color: var(--navy); margin-bottom: 4px; }
+  .bulk-cush-card .modal-subtitle { font-size: 12.5px; color: var(--text-secondary); margin-bottom: 14px; }
+  .bulk-cush-card .field-hint.leave-blank { color: var(--terracotta-dark); }
   .qr-code-card {
     background: white;
     border-radius: 16px;
@@ -1463,6 +1477,114 @@
       <div class="field-row" style="gap:8px; margin-top:16px;">
         <button type="button" class="btn btn-save" style="flex:1;" onclick="downloadQRCode()">Download</button>
         <button type="button" class="btn btn-clear-partial" style="flex:1;" onclick="closeQRCodeModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="bulk-cush-overlay" class="qr-code-overlay">
+    <div class="bulk-cush-card" onclick="event.stopPropagation();">
+      <div class="modal-title">Apply cushion fields to selected</div>
+      <div class="modal-subtitle" id="bulk-cush-count-label"></div>
+      <div class="field-hint leave-blank" style="margin-bottom:12px;">Leave any field on "Don't change" / blank to skip it &mdash; only fields you actually set here get applied.</div>
+
+      <div class="field">
+        <label for="bulkcush-quote-basis">Quoted as</label>
+        <select id="bulkcush-quote-basis">
+          <option value="">Don't change</option>
+          <option value="Fabric">Fabric</option>
+          <option value="Shell">Shell</option>
+          <option value="Finished Cushion">Finished Cushion</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="bulkcush-fabric-width">Fabric width (cm)</label>
+        <input type="number" id="bulkcush-fabric-width" step="1" placeholder="Leave blank = don't change" inputmode="decimal">
+      </div>
+
+      <div class="field">
+        <label>Fabric construction</label>
+        <div class="chip-group" id="bulkcush-construction-group">
+          <button type="button" class="chip selected" onclick="setBulkCushConstruction('')">Don't change</button>
+          <button type="button" class="chip" onclick="setBulkCushConstruction('Back to Back')">Back to Back</button>
+          <button type="button" class="chip" onclick="setBulkCushConstruction('A/B Side')">A/B Side</button>
+        </div>
+      </div>
+
+      <div id="bulkcush-back-fabric-fields" style="display:none;">
+        <div class="field-row">
+          <div class="field">
+            <label for="bulkcush-back-fabric-price">Back fabric price ($/m)</label>
+            <input type="number" id="bulkcush-back-fabric-price" step="0.01" placeholder="Leave blank = don't change" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label for="bulkcush-back-fabric-width">Back fabric width (cm)</label>
+            <input type="number" id="bulkcush-back-fabric-width" step="1" placeholder="Leave blank = don't change" inputmode="decimal">
+          </div>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label for="bulkcush-fabric-type">Fabric type</label>
+          <select id="bulkcush-fabric-type">
+            <option value="">Don't change</option>
+            <option value="Polyester">Polyester</option>
+            <option value="Cotton">Cotton</option>
+            <option value="Linen">Linen</option>
+            <option value="Velvet">Velvet</option>
+            <option value="Cotton Blend">Cotton Blend</option>
+            <option value="Chenille">Chenille</option>
+            <option value="Outdoor">Outdoor</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="bulkcush-size">Cushion size</label>
+          <select id="bulkcush-size">
+            <option value="">Don't change</option>
+            <option value="18x18">18&quot; x 18&quot; (45 x 45 cm)</option>
+            <option value="20x20">20&quot; x 20&quot; (50 x 50 cm)</option>
+            <option value="22x22">22&quot; x 22&quot; (55 x 55 cm)</option>
+            <option value="24x24">24&quot; x 24&quot; (60 x 60 cm)</option>
+            <option value="16x24">16&quot; x 24&quot; (41 x 61 cm)</option>
+            <option value="14x22">14&quot; x 22&quot; (36 x 56 cm)</option>
+            <option value="14x20">14&quot; x 20&quot; (36 x 51 cm)</option>
+            <option value="lumbar12x20">12&quot; x 20&quot; Lumbar (30 x 50 cm)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label for="bulkcush-fill-type">Fill type</label>
+          <select id="bulkcush-fill-type">
+            <option value="">Don't change</option>
+            <option value="Polyester">Polyester</option>
+            <option value="Down">Down</option>
+            <option value="Feather">Feather</option>
+            <option value="Memory Foam">Memory Foam</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="bulkcush-fill-weight">Fill weight (g)</label>
+          <input type="number" id="bulkcush-fill-weight" step="1" placeholder="Leave blank = don't change" inputmode="decimal">
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="bulkcush-closure-type">Closure type</label>
+        <select id="bulkcush-closure-type">
+          <option value="">Don't change</option>
+          <option value="Zipper">Zipper</option>
+          <option value="Hidden Zipper">Hidden Zipper</option>
+          <option value="Envelope">Envelope</option>
+          <option value="Velcro">Velcro</option>
+        </select>
+      </div>
+
+      <div class="field-row" style="gap:8px; margin-top:16px;">
+        <button type="button" class="btn btn-save" style="flex:1;" onclick="applyBulkCushionFields()">Apply to selected</button>
+        <button type="button" class="btn btn-clear-partial" style="flex:1;" onclick="closeBulkCushionModal()">Cancel</button>
       </div>
     </div>
   </div>
@@ -9555,6 +9677,7 @@ function renderSelectionToolbar() {
   el.innerHTML =
     '<div class="selection-toolbar">' +
       '<span class="sel-count">' + n + ' selected \u2014 downloads and Add to Customer Quote below will use just these</span>' +
+      '<button type="button" class="chip" onclick="openBulkCushionModal()">Apply Cushion Fields</button>' +
       '<button type="button" class="chip" onclick="bulkAddSelectedQuotesToCustomerQuote()">Add to Customer Quote</button>' +
       '<button type="button" class="chip" onclick="clearQuoteSelection()">Clear</button>' +
     '</div>';
@@ -9638,6 +9761,116 @@ async function bulkAddSelectedQuotesToCustomerQuote() {
   } else {
     maybePromptSourcing();
   }
+}
+
+// ---------------------------------------------------------------
+// Bulk-apply cushion fields across selected quotes -- fill in the
+// shared specs (width, construction, size, closure, etc.) once and
+// push them onto every selected cushion quote, instead of opening
+// each one individually through Edit.
+// ---------------------------------------------------------------
+let bulkCushConstructionChoice = ""; // "" = don't change, else "Back to Back" | "A/B Side"
+
+function setBulkCushConstruction(val) {
+  bulkCushConstructionChoice = val;
+  const label = val === "" ? "Don't change" : val;
+  document.querySelectorAll("#bulkcush-construction-group .chip").forEach(function(btn) {
+    btn.classList.toggle("selected", btn.textContent === label);
+  });
+  document.getElementById("bulkcush-back-fabric-fields").style.display = (val === "A/B Side") ? "" : "none";
+}
+
+function openBulkCushionModal() {
+  if (selectedQuoteIds.size === 0) {
+    showToast("No quotes selected.", "error");
+    return;
+  }
+  // Reset every field back to "don't change" so a previous batch's
+  // choices never silently carry over into this one.
+  document.getElementById("bulkcush-quote-basis").value = "";
+  document.getElementById("bulkcush-fabric-width").value = "";
+  document.getElementById("bulkcush-back-fabric-price").value = "";
+  document.getElementById("bulkcush-back-fabric-width").value = "";
+  document.getElementById("bulkcush-fabric-type").value = "";
+  document.getElementById("bulkcush-size").value = "";
+  document.getElementById("bulkcush-fill-type").value = "";
+  document.getElementById("bulkcush-fill-weight").value = "";
+  document.getElementById("bulkcush-closure-type").value = "";
+  bulkCushConstructionChoice = "";
+  document.querySelectorAll("#bulkcush-construction-group .chip").forEach(function(chip, i) {
+    chip.classList.toggle("selected", i === 0);
+  });
+  document.getElementById("bulkcush-back-fabric-fields").style.display = "none";
+
+  document.getElementById("bulk-cush-count-label").textContent =
+    selectedQuoteIds.size + " quote" + (selectedQuoteIds.size === 1 ? "" : "s") + " selected. Non-cushion quotes in the selection will be skipped.";
+  document.getElementById("bulk-cush-overlay").classList.add("show");
+}
+
+function closeBulkCushionModal() {
+  document.getElementById("bulk-cush-overlay").classList.remove("show");
+}
+
+async function applyBulkCushionFields() {
+  if (selectedQuoteIds.size === 0) {
+    showToast("No quotes selected.", "error");
+    return;
+  }
+
+  const numOrNull = function(id) {
+    const raw = document.getElementById(id).value;
+    if (raw === "" || raw === null) return undefined; // undefined = field left untouched
+    const n = parseFloat(raw);
+    return isNaN(n) ? undefined : n;
+  };
+  const strOrNull = function(id) {
+    const v = document.getElementById(id).value;
+    return v === "" ? undefined : v;
+  };
+
+  const patch = {
+    cushionQuoteBasis: strOrNull("bulkcush-quote-basis"),
+    cushionFabricWidth: numOrNull("bulkcush-fabric-width"),
+    cushionConstruction: bulkCushConstructionChoice || undefined,
+    cushionBackFabricPrice: numOrNull("bulkcush-back-fabric-price"),
+    cushionBackFabricWidth: numOrNull("bulkcush-back-fabric-width"),
+    cushionFabricType: strOrNull("bulkcush-fabric-type"),
+    cushionSize: strOrNull("bulkcush-size"),
+    cushionFillType: strOrNull("bulkcush-fill-type"),
+    cushionFillWeight: numOrNull("bulkcush-fill-weight"),
+    cushionClosureType: strOrNull("bulkcush-closure-type")
+  };
+  const fieldsToApply = Object.keys(patch).filter(function(k) { return patch[k] !== undefined; });
+
+  if (fieldsToApply.length === 0) {
+    showToast("Nothing set \u2014 every field is on \u201cdon't change.\u201d", "error");
+    return;
+  }
+
+  const list = await getQuotes();
+  let updatedCount = 0;
+  let skippedNonCushion = 0;
+
+  list.forEach(function(entry) {
+    if (!selectedQuoteIds.has(entry.id)) return;
+    if (entry.category !== "cushions") { skippedNonCushion++; return; }
+    fieldsToApply.forEach(function(k) { entry[k] = patch[k]; });
+    updatedCount++;
+  });
+
+  const ok = await saveQuotes(list);
+  if (!ok) {
+    showToast("Could not save these changes.", "error");
+    return;
+  }
+
+  let summary = updatedCount + " cushion quote" + (updatedCount === 1 ? "" : "s") + " updated (" + fieldsToApply.length + " field" + (fieldsToApply.length === 1 ? "" : "s") + " applied).";
+  if (skippedNonCushion > 0) summary += " " + skippedNonCushion + " skipped (not a cushion quote).";
+  showToast(summary, updatedCount > 0 ? "success" : "error");
+
+  closeBulkCushionModal();
+  clearQuoteSelection();
+  renderLog();
 }
 
 function computeCushionPriceForEntry(entry, s) {
