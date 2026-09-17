@@ -1471,12 +1471,15 @@
     </div>
   </div>
 
-  <div id="cushion-size-mode-banner" class="confirm-banner">
-    <div class="confirm-message">This includes cushion quotes. Show cushion pricing as one size (whatever's currently set on each quote), or every size &amp; construction?</div>
-    <div class="confirm-actions" style="flex-direction:column; gap:8px;">
-      <button class="btn btn-clear-partial" style="width:100%;" onclick="resolveCushionSizeModeChoice('single')">One Size (as set)</button>
-      <button class="btn btn-clear-all" style="width:100%;" onclick="resolveCushionSizeModeChoice('all')">All Sizes &amp; Constructions</button>
-      <button class="btn" style="width:100%; background:var(--border); color:var(--text-primary);" onclick="resolveCushionSizeModeChoice(null)">Cancel</button>
+  <div id="cushion-size-mode-overlay" class="qr-code-overlay">
+    <div class="bulk-cush-card" onclick="event.stopPropagation();">
+      <div class="modal-title">Cushion pricing in this download</div>
+      <div class="modal-subtitle">This includes cushion quotes. Show cushion pricing as one size (whatever's currently set on each quote), or every size &amp; construction?</div>
+      <div class="field-row" style="flex-direction:column; gap:8px;">
+        <button type="button" class="btn btn-clear-partial" style="width:100%;" onclick="resolveCushionSizeModeChoice('single')">One Size (as set)</button>
+        <button type="button" class="btn btn-clear-all" style="width:100%;" onclick="resolveCushionSizeModeChoice('all')">All Sizes &amp; Constructions</button>
+        <button type="button" class="btn" style="width:100%; background:var(--border); color:var(--text-primary);" onclick="resolveCushionSizeModeChoice(null)">Cancel</button>
+      </div>
     </div>
   </div>
 
@@ -2054,7 +2057,7 @@
           &nbsp;&nbsp;
           <span class="toggle" onclick="toggleSavedView()" id="saved-view-toggle">Table view</span>
           &nbsp;&nbsp;
-          <span class="toggle" onclick="downloadSavedQuotesCsv()">&#11015; Download CSV</span>
+          <span class="toggle" onclick="downloadSavedQuotesSpreadsheet()">&#11015; Download Spreadsheet</span>
           &nbsp;&nbsp;
           <span class="toggle" onclick="exportSavedQuotesWithQR()">&#11015; Quote Sheet with QR</span>
           &nbsp;&nbsp;
@@ -9493,6 +9496,69 @@ function computeCushionAllSizesRows(entry, s) {
   return rows;
 }
 
+// Raw-value version of the same row logic above, for the XLSX export --
+// real numbers (not "$"-prefixed strings) so ExcelJS can apply an actual
+// currency number format, plus real center alignment and computed
+// auto-fit column widths, none of which a plain .csv file can carry.
+function buildQuotesRowsData(list, cushionSizeMode) {
+  const headers = ["Date", "Category", "Vendor", "Item / Style #", "Curtain Type", "Size", "Pair", "Fabric Cost USD", "Price USD", "Landed CAD", "Sell CAD", "MSRP CAD", "Notes"];
+  const rows = [];
+  const cushionSettings = getSettings();
+  const numOrBlank = function(n) { return (typeof n === "number" && !isNaN(n)) ? n : null; };
+
+  list.forEach(function(entry) {
+    const category = entry.category === "cushions" ? "Cushion" : "Curtain";
+    const vendorStr = (entry.vendor && entry.vendor !== "(no vendor)") ? entry.vendor : "";
+    const fabricCostVal = numOrBlank((typeof entry.fabricPrice === "number" && entry.fabricPrice > 0) ? entry.fabricPrice : null);
+
+    if (entry.category === "cushions") {
+      if (cushionSizeMode === "all") {
+        const allRows = computeCushionAllSizesRows(entry, cushionSettings);
+        if (allRows.length > 0) {
+          allRows.forEach(function(r) {
+            rows.push([
+              entry.date || "", category, vendorStr, entry.item || "", entry.curtainType || "",
+              r.sizeLabel, "No", fabricCostVal,
+              numOrBlank(r.result.usd), numOrBlank(r.result.landed), numOrBlank(r.result.sell), numOrBlank(r.result.msrp),
+              entry.notes || ""
+            ]);
+          });
+          return;
+        }
+      } else {
+        const cushionPrice = computeCushionPriceForEntry(entry, cushionSettings);
+        if (cushionPrice) {
+          rows.push([
+            entry.date || "", category, vendorStr, entry.item || "", entry.curtainType || "",
+            "Shell \u00b7 " + (CUSHION_SIZE_LABELS[entry.cushionSize] || entry.cushionSize || ""),
+            "No", fabricCostVal,
+            numOrBlank(cushionPrice.usd), numOrBlank(cushionPrice.landed), numOrBlank(cushionPrice.sell), numOrBlank(cushionPrice.msrp),
+            entry.notes || ""
+          ]);
+          return;
+        }
+      }
+      rows.push([entry.date || "", category, vendorStr, entry.item || "", entry.curtainType || "", "(pricing not yet configured)", "", fabricCostVal, null, null, null, null, entry.notes || ""]);
+      return;
+    }
+
+    if (!entry.prices || entry.prices.length === 0) {
+      rows.push([entry.date || "", category, vendorStr, entry.item || "", entry.curtainType || "", "(pricing not yet configured)", "", fabricCostVal, null, null, null, null, entry.notes || ""]);
+      return;
+    }
+    entry.prices.forEach(function(p) {
+      rows.push([
+        entry.date || "", category, vendorStr, entry.item || "", entry.curtainType || "",
+        p.label, p.pair ? "Yes" : "No", fabricCostVal,
+        numOrBlank(p.usd), numOrBlank(p.landed), numOrBlank(p.sell), numOrBlank(p.msrp),
+        entry.notes || ""
+      ]);
+    });
+  });
+
+  return { headers: headers, rows: rows };
+}
+
 function buildQuotesCsv(list, cushionSizeMode) {
   const headers = ["Date", "Category", "Vendor", "Item / Style #", "Curtain Type", "Size", "Pair", "Fabric Cost USD", "Price USD", "Landed CAD", "Sell CAD", "MSRP CAD", "Notes"];
   const rows = [headers.map(csvEscape).join(",")];
@@ -9623,16 +9689,16 @@ function triggerCsvDownload(filenameBase, csvString) {
 let cushionSizeModeCallback = null;
 function showCushionSizeModeChoice(onChoice) {
   cushionSizeModeCallback = onChoice;
-  document.getElementById("cushion-size-mode-banner").classList.add("show");
+  document.getElementById("cushion-size-mode-overlay").classList.add("show");
 }
 function resolveCushionSizeModeChoice(mode) {
-  document.getElementById("cushion-size-mode-banner").classList.remove("show");
+  document.getElementById("cushion-size-mode-overlay").classList.remove("show");
   const cb = cushionSizeModeCallback;
   cushionSizeModeCallback = null;
   if (cb) cb(mode);
 }
 
-async function downloadSavedQuotesCsv() {
+async function downloadSavedQuotesSpreadsheet() {
   let list = await getQuotes();
 
   const filtered = getExportQuoteList(list);
@@ -9641,10 +9707,88 @@ async function downloadSavedQuotesCsv() {
     return;
   }
 
-  function proceed(cushionSizeMode) {
-    const csv = buildQuotesCsv(filtered, cushionSizeMode);
-    triggerCsvDownload(selectedQuoteIds.size > 0 ? "Selected_Quotes" : (savedVendorFilter ? savedVendorFilter + "_Quotes" : "All_Quotes"), csv);
-    showToast("CSV downloaded.", "success");
+  async function proceed(cushionSizeMode) {
+    try {
+      await ensureExcelJSLibLoaded();
+    } catch (e) {
+      showToast("Could not load the spreadsheet library. Check your connection and try again.", "error");
+      return;
+    }
+
+    const data = buildQuotesRowsData(filtered, cushionSizeMode);
+    const MONEY_COLS = [8, 9, 10, 11, 12]; // 1-indexed: Fabric Cost, Price, Landed, Sell, MSRP
+    const CURRENCY_FMT = '"$"#,##0.00';
+
+    const workbook = new window.ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Quotes");
+
+    // Row 1: logo title banner, same pattern as the other exports (Quote
+    // Sheet, Item Master, bulk-upload templates) -- merged, dark fill,
+    // sized to fit the logo image cleanly.
+    sheet.addRow(new Array(data.headers.length).fill(""));
+    sheet.addRow(data.headers);
+    data.rows.forEach(function(r) { sheet.addRow(r); });
+
+    sheet.getRow(1).height = 42;
+    const lastColLetter = String.fromCharCode(64 + data.headers.length);
+    sheet.mergeCells("A1:" + lastColLetter + "1");
+    sheet.getCell("A1").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF00112C" } };
+    const logoBase64 = getLogoBase64ForExcel();
+    if (logoBase64) {
+      const logoImageId = workbook.addImage({ base64: logoBase64, extension: "png" });
+      sheet.addImage(logoImageId, {
+        tl: { col: 0.15, row: 0.12 },
+        ext: { width: 950, height: 56 }
+      });
+    }
+
+    const HEADER_ROW = 2;
+
+    // Auto-fit: widest of the header or any cell in that column, plus a
+    // little padding -- computed from the actual data, not a fixed guess,
+    // so it's right for this export whatever ends up in it.
+    data.headers.forEach(function(h, colIdx) {
+      let maxLen = String(h).length;
+      data.rows.forEach(function(r) {
+        const cell = r[colIdx];
+        const cellStr = (cell === null || cell === undefined) ? "" :
+          (MONEY_COLS.indexOf(colIdx + 1) !== -1 && typeof cell === "number") ? ("$" + cell.toFixed(2)) : String(cell);
+        if (cellStr.length > maxLen) maxLen = cellStr.length;
+      });
+      sheet.getColumn(colIdx + 1).width = maxLen + 3;
+    });
+
+    const headerRow = sheet.getRow(HEADER_ROW);
+    headerRow.eachCell(function(cell) {
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF16324F" } };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+    });
+
+    for (let r = HEADER_ROW + 1; r <= data.rows.length + HEADER_ROW; r++) {
+      const row = sheet.getRow(r);
+      row.eachCell({ includeEmpty: true }, function(cell, colNumber) {
+        cell.alignment = { horizontal: "center", vertical: "middle" };
+        if (MONEY_COLS.indexOf(colNumber) !== -1 && typeof cell.value === "number") {
+          cell.numFmt = CURRENCY_FMT;
+        }
+      });
+    }
+
+    sheet.views = [{ state: "frozen", ySplit: HEADER_ROW }];
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const filenameBase = selectedQuoteIds.size > 0 ? "Selected_Quotes" : (savedVendorFilter ? savedVendorFilter + "_Quotes" : "All_Quotes");
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "NexTex_" + filenameBase.replace(/[^a-z0-9\-_ ]/gi, "").trim().replace(/\s+/g, "_") + "_" + new Date().toISOString().slice(0, 10) + ".xlsx";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast("Downloaded.", "success");
   }
 
   const hasCushions = filtered.some(function(e) { return e.category === "cushions"; });
