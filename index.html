@@ -1127,9 +1127,10 @@
   }
   .quote-num { font-size: 11px; font-weight: 700; color: var(--text-secondary); width: 18px; flex-shrink: 0; }
   .quote-select-checkbox { width: 17px; height: 17px; flex-shrink: 0; cursor: pointer; margin: 0; }
-  .selection-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: var(--pair-bg); border: 1.5px solid var(--terracotta); border-radius: 10px; padding: 8px 12px; margin-bottom: 10px; }
-  .selection-toolbar .sel-count { font-size: 12.5px; font-weight: 700; color: var(--terracotta-dark); flex: 1; }
-  .selection-toolbar button { flex-shrink: 0; }
+  .selection-toolbar { display: flex; flex-direction: column; gap: 8px; background: var(--pair-bg); border: 1.5px solid var(--terracotta); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+  .selection-toolbar .sel-count { font-size: 12.5px; font-weight: 700; color: var(--terracotta-dark); }
+  .selection-toolbar .sel-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .selection-toolbar .sel-actions button { flex: 1 1 100%; white-space: nowrap; font-size: 13px; padding: 9px 10px; text-align: center; }
   .quote-thumb { width: 34px; height: 34px; border-radius: 8px; object-fit: cover; flex-shrink: 0; }
   .gallery-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .gallery-card {
@@ -1470,6 +1471,15 @@
     </div>
   </div>
 
+  <div id="cushion-size-mode-banner" class="confirm-banner">
+    <div class="confirm-message">This includes cushion quotes. Show cushion pricing as one size (whatever's currently set on each quote), or every size &amp; construction?</div>
+    <div class="confirm-actions" style="flex-direction:column; gap:8px;">
+      <button class="btn btn-clear-partial" style="width:100%;" onclick="resolveCushionSizeModeChoice('single')">One Size (as set)</button>
+      <button class="btn btn-clear-all" style="width:100%;" onclick="resolveCushionSizeModeChoice('all')">All Sizes &amp; Constructions</button>
+      <button class="btn" style="width:100%; background:var(--border); color:var(--text-primary);" onclick="resolveCushionSizeModeChoice(null)">Cancel</button>
+    </div>
+  </div>
+
   <div id="qr-code-overlay" class="qr-code-overlay" onclick="closeQRCodeModal()">
     <div class="qr-code-card" onclick="event.stopPropagation();">
       <div id="qr-code-item-label" class="qr-code-label"></div>
@@ -1486,6 +1496,11 @@
       <div class="modal-title">Apply cushion fields to selected</div>
       <div class="modal-subtitle" id="bulk-cush-count-label"></div>
       <div class="field-hint leave-blank" style="margin-bottom:12px;">Leave any field on "Don't change" / blank to skip it &mdash; only fields you actually set here get applied.</div>
+
+      <div class="field">
+        <label for="bulkcush-customer">Customer</label>
+        <input type="text" id="bulkcush-customer" placeholder="Leave blank = don't change">
+      </div>
 
       <div class="field">
         <label for="bulkcush-quote-basis">Quoted as</label>
@@ -5715,7 +5730,7 @@ async function exportSavedQuotesWithQR() {
   const sheet = workbook.addWorksheet("Quote Sheet");
 
   const headers = [
-    "QR Code", "Item #", "Vendor", "Customer", "Category", "Size", "Fabric Cost (USD)", "Cost (USD)", "Date", "Notes"
+    "QR Code", "Item #", "Vendor", "Category", "Size", "Fabric Cost (USD)", "Cost (USD)", "Date", "Notes", "Customer"
   ];
   const QR_COL_WIDTH_CHARS = 14;
   const QR_ROW_HEIGHT_POINTS = 78;
@@ -5751,8 +5766,8 @@ async function exportSavedQuotesWithQR() {
 
   const THIN_BORDER = { style: "thin" };
   const settingsForExport = getSettings();
-  const FABRIC_COST_COL = 7;
-  const COST_COL = 8;
+  const FABRIC_COST_COL = 6;
+  const COST_COL = 7;
 
   for (let i = 0; i < quotes.length; i++) {
     const entry = quotes[i];
@@ -5774,9 +5789,9 @@ async function exportSavedQuotesWithQR() {
     const fabricCostVal = (typeof entry.fabricPrice === "number" && entry.fabricPrice > 0) ? entry.fabricPrice : null;
 
     sheet.getRow(rowIdx).values = [
-      "", entry.item || "", entry.vendor || "", entry.customer || "",
+      "", entry.item || "", entry.vendor || "",
       entry.category === "cushions" ? "Cushions" : "Curtains",
-      sizeLabel, fabricCostVal, costVal, entry.date || "", entry.notes || ""
+      sizeLabel, fabricCostVal, costVal, entry.date || "", entry.notes || "", entry.customer || ""
     ];
     sheet.getRow(rowIdx).height = QR_ROW_HEIGHT_POINTS;
     sheet.getRow(rowIdx).eachCell({ includeEmpty: true }, function(cell) {
@@ -9447,24 +9462,116 @@ function csvEscape(val) {
   return s;
 }
 
-function buildQuotesCsv(list) {
+// Expands a cushion entry into a row per size x construction, using the
+// entry's OWN fabric fields -- never a hardcoded backing assumption. Back
+// Wall (A/B Side) rows only appear when the entry actually has its own
+// back-fabric price and width set (e.g. via Apply Cushion Fields or Edit);
+// otherwise there's nothing real to compute and we don't invent one.
+function computeCushionAllSizesRows(entry, s) {
+  const frontWidth = (typeof entry.cushionFabricWidth === "number" && entry.cushionFabricWidth > 0)
+    ? entry.cushionFabricWidth
+    : entry.fabricWidth;
+  const frontPrice = entry.fabricPrice;
+  if (typeof frontPrice !== "number" || frontPrice <= 0 || typeof frontWidth !== "number" || frontWidth <= 0) {
+    return [];
+  }
+  const backPrice = entry.cushionBackFabricPrice;
+  const backWidth = entry.cushionBackFabricWidth;
+  const hasBackFabric = typeof backPrice === "number" && backPrice > 0 && typeof backWidth === "number" && backWidth > 0;
+  const decorativeFeatures = entry.decorativeFeatures || [];
+
+  const rows = [];
+  Object.keys(CUSHION_SIZE_LABELS).forEach(function(sizeKey) {
+    const label = CUSHION_SIZE_LABELS[sizeKey];
+    const btb = computeCushionFabricBasis(sizeKey, "Back to Back", frontPrice, frontWidth, null, null, decorativeFeatures, s);
+    if (btb) rows.push({ sizeLabel: label + " \u00b7 Back to Back", result: btb });
+    if (hasBackFabric) {
+      const ab = computeCushionFabricBasis(sizeKey, "A/B Side", frontPrice, frontWidth, backPrice, backWidth, decorativeFeatures, s);
+      if (ab) rows.push({ sizeLabel: label + " \u00b7 A/B Side", result: ab });
+    }
+  });
+  return rows;
+}
+
+function buildQuotesCsv(list, cushionSizeMode) {
   const headers = ["Date", "Category", "Vendor", "Item / Style #", "Curtain Type", "Size", "Pair", "Fabric Cost USD", "Price USD", "Landed CAD", "Sell CAD", "MSRP CAD", "Notes"];
   const rows = [headers.map(csvEscape).join(",")];
   // Prefixing with "$" isn't just cosmetic here -- Excel and Sheets both
   // parse a "$"-led CSV cell as a real currency-formatted number on open,
   // not as text, so this is the CSV equivalent of a currency number format.
+  // Every price cell in every branch below goes through this -- none are
+  // ever written as a raw number.
   const money = function(n) { return (typeof n === "number" && !isNaN(n)) ? "$" + n.toFixed(2) : ""; };
+  const cushionSettings = getSettings();
 
   list.forEach(function(entry) {
     const category = entry.category === "cushions" ? "Cushion" : "Curtain";
+    const vendorStr = (entry.vendor && entry.vendor !== "(no vendor)") ? entry.vendor : "";
     // The root fabric cost per meter -- the raw-material figure every
     // finished price below is actually built from.
     const fabricCostStr = money((typeof entry.fabricPrice === "number" && entry.fabricPrice > 0) ? entry.fabricPrice : null);
+
+    if (entry.category === "cushions") {
+      if (cushionSizeMode === "all") {
+        const allRows = computeCushionAllSizesRows(entry, cushionSettings);
+        if (allRows.length > 0) {
+          allRows.forEach(function(r) {
+            rows.push([
+              entry.date || "", category, vendorStr, entry.item || "", entry.curtainType || "",
+              r.sizeLabel, "No", fabricCostStr,
+              money(r.result.usd), money(r.result.landed), money(r.result.sell), money(r.result.msrp),
+              entry.notes || ""
+            ].map(csvEscape).join(","));
+          });
+          return;
+        }
+        // Nothing computable even in "all sizes" mode -- fall through to
+        // the same "not configured" row used everywhere else below.
+      } else {
+        // Cushions don't carry a size-priced array like curtains do -- their
+        // price is computed on the fly from cushionQuoteBasis + related
+        // fields, same as the Saved Quotes list and the Quote Sheet (QR)
+        // export already do. Mirror that here instead of leaving it blank.
+        const cushionPrice = computeCushionPriceForEntry(entry, cushionSettings);
+        if (cushionPrice) {
+          rows.push([
+            entry.date || "",
+            category,
+            vendorStr,
+            entry.item || "",
+            entry.curtainType || "",
+            "Shell \u00b7 " + (CUSHION_SIZE_LABELS[entry.cushionSize] || entry.cushionSize || ""),
+            "No",
+            fabricCostStr,
+            money(cushionPrice.usd),
+            money(cushionPrice.landed),
+            money(cushionPrice.sell),
+            money(cushionPrice.msrp),
+            entry.notes || ""
+          ].map(csvEscape).join(","));
+          return;
+        }
+      }
+      rows.push([
+        entry.date || "",
+        category,
+        vendorStr,
+        entry.item || "",
+        entry.curtainType || "",
+        "(pricing not yet configured)",
+        "",
+        fabricCostStr,
+        "", "", "", "",
+        entry.notes || ""
+      ].map(csvEscape).join(","));
+      return;
+    }
+
     if (!entry.prices || entry.prices.length === 0) {
       rows.push([
         entry.date || "",
         category,
-        (entry.vendor && entry.vendor !== "(no vendor)") ? entry.vendor : "",
+        vendorStr,
         entry.item || "",
         entry.curtainType || "",
         "(pricing not yet configured)",
@@ -9479,7 +9586,7 @@ function buildQuotesCsv(list) {
       rows.push([
         entry.date || "",
         category,
-        (entry.vendor && entry.vendor !== "(no vendor)") ? entry.vendor : "",
+        vendorStr,
         entry.item || "",
         entry.curtainType || "",
         p.label,
@@ -9513,6 +9620,18 @@ function triggerCsvDownload(filenameBase, csvString) {
   setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
 }
 
+let cushionSizeModeCallback = null;
+function showCushionSizeModeChoice(onChoice) {
+  cushionSizeModeCallback = onChoice;
+  document.getElementById("cushion-size-mode-banner").classList.add("show");
+}
+function resolveCushionSizeModeChoice(mode) {
+  document.getElementById("cushion-size-mode-banner").classList.remove("show");
+  const cb = cushionSizeModeCallback;
+  cushionSizeModeCallback = null;
+  if (cb) cb(mode);
+}
+
 async function downloadSavedQuotesCsv() {
   let list = await getQuotes();
 
@@ -9522,9 +9641,21 @@ async function downloadSavedQuotesCsv() {
     return;
   }
 
-  const csv = buildQuotesCsv(filtered);
-  triggerCsvDownload(selectedQuoteIds.size > 0 ? "Selected_Quotes" : (savedVendorFilter ? savedVendorFilter + "_Quotes" : "All_Quotes"), csv);
-  showToast("CSV downloaded.", "success");
+  function proceed(cushionSizeMode) {
+    const csv = buildQuotesCsv(filtered, cushionSizeMode);
+    triggerCsvDownload(selectedQuoteIds.size > 0 ? "Selected_Quotes" : (savedVendorFilter ? savedVendorFilter + "_Quotes" : "All_Quotes"), csv);
+    showToast("CSV downloaded.", "success");
+  }
+
+  const hasCushions = filtered.some(function(e) { return e.category === "cushions"; });
+  if (hasCushions) {
+    showCushionSizeModeChoice(function(mode) {
+      if (!mode) return; // cancelled
+      proceed(mode);
+    });
+  } else {
+    proceed("single");
+  }
 }
 
 async function downloadSupplierQuotesCsv(vendorName) {
@@ -9677,9 +9808,11 @@ function renderSelectionToolbar() {
   el.innerHTML =
     '<div class="selection-toolbar">' +
       '<span class="sel-count">' + n + ' selected \u2014 downloads and Add to Customer Quote below will use just these</span>' +
-      '<button type="button" class="chip" onclick="openBulkCushionModal()">Apply Cushion Fields</button>' +
-      '<button type="button" class="chip" onclick="bulkAddSelectedQuotesToCustomerQuote()">Add to Customer Quote</button>' +
-      '<button type="button" class="chip" onclick="clearQuoteSelection()">Clear</button>' +
+      '<div class="sel-actions">' +
+        '<button type="button" class="chip" onclick="openBulkCushionModal()">Apply Cushion Fields</button>' +
+        '<button type="button" class="chip" onclick="bulkAddSelectedQuotesToCustomerQuote()">Add to Customer Quote</button>' +
+        '<button type="button" class="chip" onclick="clearQuoteSelection()">Clear</button>' +
+      '</div>' +
     '</div>';
 }
 
@@ -9787,6 +9920,7 @@ function openBulkCushionModal() {
   }
   // Reset every field back to "don't change" so a previous batch's
   // choices never silently carry over into this one.
+  document.getElementById("bulkcush-customer").value = "";
   document.getElementById("bulkcush-quote-basis").value = "";
   document.getElementById("bulkcush-fabric-width").value = "";
   document.getElementById("bulkcush-back-fabric-price").value = "";
@@ -9829,6 +9963,7 @@ async function applyBulkCushionFields() {
   };
 
   const patch = {
+    customer: strOrNull("bulkcush-customer"),
     cushionQuoteBasis: strOrNull("bulkcush-quote-basis"),
     cushionFabricWidth: numOrNull("bulkcush-fabric-width"),
     cushionConstruction: bulkCushConstructionChoice || undefined,
