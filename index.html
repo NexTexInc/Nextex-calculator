@@ -1376,6 +1376,10 @@
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16"></path><path d="M8 20V10"></path><path d="M13 20V4"></path><path d="M18 20v-7"></path></svg>
       <span style="flex:1;">Storage Check</span>
     </button>
+    <button type="button" class="hamburger-menu-item" onclick="inspectQuotesStorage()">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>
+      <span style="flex:1;">Inspect Quotes Storage</span>
+    </button>
   </div>
 
   <div class="header">
@@ -2923,6 +2927,53 @@ async function runStorageDiagnostics() {
   alert(lines.join("\n"));
 }
 
+// Read-only inspection of the quotes storage specifically -- does NOT
+// write, delete, or migrate anything. Built to answer one question:
+// is there a leftover old-format blob, and what (if anything) does the
+// current index actually contain, versus what orphaned photo keys exist.
+async function inspectQuotesStorage() {
+  const lines = [];
+  lines.push("QUOTES STORAGE INSPECTION (read-only)");
+  lines.push("");
+
+  let oldRaw = null;
+  try { oldRaw = HAS_CLAUDE_STORAGE ? (await storageGet("nextex_quotes")) : window.localStorage.getItem("nextex_quotes"); } catch (e) { oldRaw = null; }
+  if (oldRaw !== null) {
+    let oldCount = 0;
+    try { const p = JSON.parse(oldRaw); oldCount = Array.isArray(p) ? p.length : 0; } catch (e) { oldCount = -1; }
+    lines.push("OLD blob (\"nextex_quotes\") STILL EXISTS: " + formatBytes(approxByteSize("nextex_quotes", oldRaw)) + ", " + (oldCount >= 0 ? oldCount + " quotes inside" : "could not parse"));
+    lines.push("=> Good news: this means recovery is likely possible. Do not tap Storage Check or open Saved Quotes again until this is fixed.");
+  } else {
+    lines.push("OLD blob (\"nextex_quotes\"): does not exist (already removed).");
+  }
+  lines.push("");
+
+  let indexRaw = null;
+  try { indexRaw = HAS_CLAUDE_STORAGE ? (await storageGet("nextex_quotes_index")) : window.localStorage.getItem("nextex_quotes_index"); } catch (e) { indexRaw = null; }
+  let index = [];
+  try { index = indexRaw ? JSON.parse(indexRaw) : []; } catch (e) { index = null; }
+  if (index === null) {
+    lines.push("Current index (\"nextex_quotes_index\"): EXISTS but could not be parsed (corrupted).");
+  } else {
+    lines.push("Current index (\"nextex_quotes_index\"): " + index.length + " quote(s) listed" + (indexRaw ? "" : " (key not found)") + ".");
+    index.slice(0, 5).forEach(function(e, i) {
+      lines.push("  " + (i + 1) + ". " + (e.vendor || "?") + " / " + (e.item || "?") + " / id=" + e.id);
+    });
+    if (index.length > 5) lines.push("  ...and " + (index.length - 5) + " more.");
+  }
+  lines.push("");
+
+  let keys = [];
+  try { keys = HAS_CLAUDE_STORAGE ? ((await window.storage.list(undefined, false)).keys || []) : Object.keys(window.localStorage); } catch (e) { keys = []; }
+  const photoKeys = keys.filter(function(k) { return k.indexOf("nextex_quote_photo_") === 0; });
+  const indexIds = new Set(index && index.map ? index.map(function(e) { return e.id; }) : []);
+  const orphaned = photoKeys.filter(function(k) { return !indexIds.has(k.replace("nextex_quote_photo_", "")); });
+  lines.push("Photo-slot keys found: " + photoKeys.length + " total, " + orphaned.length + " orphaned (not referenced by the current index).");
+
+  alert(lines.join("\n"));
+}
+
+
 // ---------------------------------------------------------------
 // Fabric/trim pricing logic (mirrors the Fabric Cost Calc Excel workbook)
 // ---------------------------------------------------------------
@@ -4077,13 +4128,18 @@ async function downloadMeetingSummary() {
 // only the storage underneath these two functions changed.
 async function getSessionPhotos() {
   // One-time migration: if the old single-blob format is still present,
-  // split it into the new structure, then remove the old blob.
+  // split it into the new structure. The old blob is ONLY removed if the
+  // new format actually saved successfully.
   const oldRaw = await storageGet("nextex_session_photos");
   if (oldRaw !== null) {
     let oldList = [];
     try { oldList = JSON.parse(oldRaw) || []; } catch (e) { oldList = []; }
-    await saveSessionPhotos(oldList);
-    await storageDelete("nextex_session_photos");
+    const migrated = await saveSessionPhotos(oldList);
+    if (migrated) {
+      await storageDelete("nextex_session_photos");
+    } else {
+      return oldList;
+    }
   }
 
   const indexRaw = await storageGet("nextex_session_photos_index");
@@ -4154,13 +4210,23 @@ function photoFingerprint(photo) {
 
 async function getQuotes() {
   // One-time migration: if the old single-blob format is still present,
-  // split it into the new structure, then remove the old blob.
+  // split it into the new structure. The old blob is ONLY removed if the
+  // new format actually saved successfully -- losing the destination
+  // write must never cost you the source data too.
   const oldRaw = await storageGet("nextex_quotes");
   if (oldRaw !== null) {
     let oldList = [];
     try { oldList = JSON.parse(oldRaw) || []; } catch (e) { oldList = []; }
-    await saveQuotes(oldList);
-    await storageDelete("nextex_quotes");
+    const migrated = await saveQuotes(oldList);
+    if (migrated) {
+      await storageDelete("nextex_quotes");
+    } else {
+      // Migration didn't fully succeed (commonly: out of storage room).
+      // Return the original, untouched list rather than whatever partial
+      // index the failed save may have left behind -- the old blob is
+      // still the only complete, trustworthy copy at this point.
+      return oldList;
+    }
   }
 
   const indexRaw = await storageGet("nextex_quotes_index");
