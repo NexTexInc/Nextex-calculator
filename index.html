@@ -580,6 +580,22 @@
     color: var(--text-primary);
     font-family: inherit;
   }
+  /* This is the primary scan-gun target on the Run List screen -- sized
+     deliberately large (roughly double a normal field) since it's tapped
+     and read constantly, not an occasional secondary input. */
+  #runlist-sku-input {
+    padding: 22px 40px 22px 16px;
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    font-size: 26px;
+    font-weight: 600;
+    background: var(--card);
+    color: var(--text-primary);
+    font-family: inherit;
+  }
+  #runlist-sku-input::placeholder { font-size: 20px; font-weight: 400; }
+  .runlist-sku-wrap .input-clear-btn { width: 32px; height: 32px; font-size: 15px; right: 10px; }
+  #runlist-add-btn { flex: none; padding: 0 22px; font-size: 18px; }
   .field input:focus, .field select:focus { outline: none; border-color: var(--terracotta); }
   .field-row { display: flex; gap: 10px; }
   .field-row .field { flex: 1; }
@@ -1717,6 +1733,71 @@
           </div>
           <div class="field-hint">Freight doubles automatically for 37" pair rows.</div>
 
+          <div class="settings-sub">Curtain fabric-basis build-up (factory add-ons)</div>
+          <div class="field-hint">These were hardcoded and invisible until now -- the values below are today's exact numbers, so nothing changes on this update. Review and adjust as needed.</div>
+          <div class="field-row">
+            <div class="field">
+              <label for="s-curtain-grommet-qty-50">Grommets/panel &mdash; 50"W</label>
+              <input type="number" id="s-curtain-grommet-qty-50" step="1" value="8">
+            </div>
+            <div class="field">
+              <label for="s-curtain-grommet-qty-52">Grommets/panel &mdash; 52"W</label>
+              <input type="number" id="s-curtain-grommet-qty-52" step="1" value="8">
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="s-curtain-grommet-qty-37">Grommets/panel &mdash; 37"W</label>
+              <input type="number" id="s-curtain-grommet-qty-37" step="1" value="6">
+            </div>
+            <div class="field">
+              <label for="s-curtain-eyelet-rmb-pair">Eyelet cost (&yen;/pair, quoted at 37"W)</label>
+              <input type="number" id="s-curtain-eyelet-rmb-pair" step="0.01" value="1.92">
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="s-curtain-rmb-fx">RMB &rarr; USD rate (grommets/trim only)</label>
+              <input type="number" id="s-curtain-rmb-fx" step="0.01" value="6.8">
+            </div>
+          </div>
+          <div class="field-hint">Price per grommet = (Eyelet &yen;/pair &divide; 2 &divide; RMB rate) &divide; 37"W grommet qty, then &times; the panel's own grommet qty above. This RMB rate only converts grommet/trim costs to USD -- it's separate from the main FX rate further down, which converts USD to CAD for landed cost.</div>
+
+          <div class="settings-sub">Flat trim &amp; packaging (Curtains, per panel)</div>
+          <div class="field-hint">Non-woven/Labels, Package Box/Carton, and Sewing/Cut/Packing were bundled into three combined figures when this was first built. Shown as their original RMB-per-pair values plus a flat USD add-on -- split further or relabel once confirmed with your factory.</div>
+          <div class="field-row">
+            <div class="field">
+              <label for="s-curtain-trim-nonwoven-labels">Non-woven + Labels (&yen;/pair)</label>
+              <input type="number" id="s-curtain-trim-nonwoven-labels" step="0.01" value="0.54">
+            </div>
+            <div class="field">
+              <label for="s-curtain-trim-pkgbox-carton">Package Box + Carton (&yen;/pair)</label>
+              <input type="number" id="s-curtain-trim-pkgbox-carton" step="0.01" value="0.30">
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="s-curtain-trim-sewing">Sewing / Cut / Packing (&yen;/pair)</label>
+              <input type="number" id="s-curtain-trim-sewing" step="0.01" value="7.00">
+            </div>
+            <div class="field">
+              <label for="s-curtain-trim-fob-inland">FOB / Inland freight ($/panel)</label>
+              <input type="number" id="s-curtain-trim-fob-inland" step="0.01" value="0.09">
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="s-curtain-pkg-single">Packaging &mdash; single panel ($)</label>
+              <input type="number" id="s-curtain-pkg-single" step="0.01" value="0.20">
+            </div>
+            <div class="field">
+              <label for="s-curtain-pkg-pair">Packaging &mdash; pair ($)</label>
+              <input type="number" id="s-curtain-pkg-pair" step="0.01" value="0.25">
+            </div>
+          </div>
+          <div class="field-hint">Applied per panel: Fabric cost + Grommets + (Non-woven+Labels + Package Box+Carton + Sewing/Cut/Packing, &divide;2 &divide; RMB rate) + FOB/Inland + Packaging = Price (USD/panel) &mdash; which then goes through Duty &amp; freight above. Pair rows double the grommet and trim portion and add the pair packaging fee instead of the single fee.</div>
+          <button type="button" class="scan-btn" style="width:100%; margin-top:10px;" onclick="resetCurtainFactoryDefaults()">Reset Factory Add-ons to Original Defaults</button>
+
           <div class="settings-sub">Freight reference calculator (Curtains)</div>
           <div class="field-row">
             <div class="field">
@@ -1907,6 +1988,15 @@
             <button type="button" class="chip" onclick="setCurtainType('Room Darkening')">Room Darkening</button>
             <button type="button" class="chip" onclick="setCurtainType('No Coating')">No Coating</button>
           </div>
+        </div>
+        <div class="field">
+          <label>Mount type</label>
+          <div class="chip-group" id="mount-type-group">
+            <button type="button" class="chip selected" data-mount="GROMMET" onclick="setMountType('GROMMET')">Grommet</button>
+            <button type="button" class="chip" data-mount="ROD POCKET" onclick="setMountType('ROD POCKET')">Rod Pocket</button>
+            <button type="button" class="chip" data-mount="TAB BACK" onclick="setMountType('TAB BACK')">Tab Back</button>
+          </div>
+          <div class="field-hint">Rod Pocket removes the grommet hardware cost per panel -- a real way to bring a panel's price down. Tab Back currently prices the same as Grommet; tell me if that should change too.</div>
         </div>
       </div>
 
@@ -2458,6 +2548,7 @@
         <button type="button" class="btn btn-clear-partial" id="meeting-finalize-btn" onclick="toggleMeetingFinalized()" style="flex:1;"></button>
         <button type="button" class="btn btn-clear-partial" onclick="downloadMeetingSummary()" style="flex:1;">Download summary</button>
       </div>
+      <button type="button" class="scan-btn" style="width:100%; margin-top:10px; color:var(--rust); border-color:var(--rust);" onclick="deleteMeeting(currentMeetingDetailId)">Delete Meeting</button>
 
       <p class="section-label" style="margin-top:20px;">Quotes in this meeting</p>
       <div id="meeting-detail-quotes"></div>
@@ -2813,11 +2904,11 @@
       <div class="field-hint" style="margin-bottom:10px;">Type a SKU, scan it with a scan gun, or use your phone's camera. Each adds that item to a live working list, drawn from your saved quotes -- not a new quote. Review, filter, export, or send it to a Meeting, Sourcing session, or Customer Quote.</div>
 
       <div class="field-row" style="gap:8px; margin-bottom:6px;">
-        <div class="clearable-input-wrap" style="flex:1;">
+        <div class="clearable-input-wrap runlist-sku-wrap" style="flex:1;">
           <input type="text" id="runlist-sku-input" placeholder="Type or scan SKU..." autocomplete="off" autocapitalize="off" oninput="toggleClearBtn(this)" onkeydown="handleRunListSkuKeydown(event)">
           <button type="button" class="input-clear-btn" onclick="clearInputField(this)" style="display:none;">&#10005;</button>
         </div>
-        <button type="button" class="scan-btn" style="flex:none; padding:0 16px;" onclick="submitRunListSku()">Add</button>
+        <button type="button" class="scan-btn" id="runlist-add-btn" onclick="submitRunListSku()">Add</button>
       </div>
       <div class="field-hint" id="runlist-scan-status" style="margin-top:-2px; margin-bottom:10px; text-align:center;"></div>
 
@@ -2848,7 +2939,13 @@
 
       <div id="runlist-selection-toolbar" style="display:none;"></div>
 
-      <p class="section-label">Scanned so far (<span id="runlist-count">0</span>)</p>
+      <p class="section-label" style="display:flex; align-items:center; justify-content:space-between;">
+        <span>Scanned so far (<span id="runlist-count">0</span>)</span>
+        <label style="display:flex; align-items:center; gap:6px; font-size:11px; font-weight:700; text-transform:none; letter-spacing:0; cursor:pointer; color:var(--text-secondary);">
+          <input type="checkbox" id="runlist-select-all-checkbox" style="width:15px; height:15px; margin:0; cursor:pointer;" onchange="toggleSelectAllRunList(this.checked)">
+          Select All
+        </label>
+      </p>
       <div id="runlist-list"></div>
 
       <div class="field-row" style="gap:8px; margin-top:14px;">
@@ -3230,21 +3327,27 @@ async function inspectQuotesStorage() {
 // ---------------------------------------------------------------
 const IDEAL_WIDTH = { 50: 280, 52: 290, 37: 305 };
 const SIDE_HEM    = { 50: 4,   52: 4,   37: 2.5 };
-const GROMMET_QTY = { 50: 8,   52: 8,   37: 6 };
 const N_PER_PASS  = {};
 Object.keys(IDEAL_WIDTH).forEach(function(w) {
   const cutW = Number(w) + SIDE_HEM[w];
   N_PER_PASS[w] = Math.floor(IDEAL_WIDTH[w] / 2.54 / cutW);
 });
 const CUT_LENGTH = { 84: 84 + 4 + 8, 63: 63 + 4 + 8 };
-const EXCHANGE_RATE_RMB = 6.8;
-const EYELET_RMB_PER_PAIR = 1.92;
-const GROMMET_PRICE = (EYELET_RMB_PER_PAIR / 2 / EXCHANGE_RATE_RMB) / GROMMET_QTY[37];
-const FLAT_TRIM = (0.54 + 0.30 + 7.00) / 2 / EXCHANGE_RATE_RMB + 0.09;
-const PKG_SINGLE = 0.20;
-const PKG_PAIR = 0.25;
 
-function grommetCost(width) { return GROMMET_QTY[width] * GROMMET_PRICE; }
+// Grommet qty, eyelet/trim/packaging costs are all pulled from Settings now
+// (Curtain fabric-basis build-up) instead of being hardcoded here -- see
+// getSettings(). Defaults there match the original constants exactly, so
+// this refactor changes visibility, not any live price, until someone
+// actually edits a field.
+function grommetCost(width, s) {
+  const qty = (width === 50) ? s.curtainGrommetQty50 : (width === 52) ? s.curtainGrommetQty52 : s.curtainGrommetQty37;
+  const grommetPriceUsd = (s.curtainEyeletRmbPair / 2 / s.curtainRmbFx) / s.curtainGrommetQty37;
+  return qty * grommetPriceUsd;
+}
+
+function flatTrimPerPanel(s) {
+  return ((s.curtainTrimNonwovenLabels + s.curtainTrimPkgboxCarton + s.curtainTrimSewing) / 2 / s.curtainRmbFx) + s.curtainTrimFobInland;
+}
 
 function fabricCostPerPanel(width, length, price, quotedWidth, isPair) {
   const adjPrice = price * IDEAL_WIDTH[width] / quotedWidth;
@@ -3255,13 +3358,16 @@ function fabricCostPerPanel(width, length, price, quotedWidth, isPair) {
   return fab;
 }
 
-function priceUsdPerPanel(width, length, price, quotedWidth, isPair) {
+function priceUsdPerPanel(width, length, price, quotedWidth, isPair, s, mountType) {
   const fab = fabricCostPerPanel(width, length, price, quotedWidth, isPair);
-  const gr = grommetCost(width);
+  // Rod Pocket has no grommet hardware -- that cost drops out entirely,
+  // everything else (fabric, sewing/trim, packaging) stays the same.
+  const gr = (mountType === "ROD POCKET") ? 0 : grommetCost(width, s);
+  const flatTrim = flatTrimPerPanel(s);
   if (isPair) {
-    return fab + (gr + FLAT_TRIM) * 2 + PKG_PAIR;
+    return fab + (gr + flatTrim) * 2 + s.curtainPkgPair;
   }
-  return fab + gr + FLAT_TRIM + PKG_SINGLE;
+  return fab + gr + flatTrim + s.curtainPkgSingle;
 }
 
 // ---------------------------------------------------------------
@@ -3285,6 +3391,17 @@ function getSettings() {
     msrpGM: parseFloat(document.getElementById("s-msrp-gm").value) || 0,
     containerCost: parseFloat(document.getElementById("s-container-cost").value) || 0,
     containerPanels: parseFloat(document.getElementById("s-container-panels").value) || 1,
+    curtainGrommetQty50: parseFloat(document.getElementById("s-curtain-grommet-qty-50").value) || 0,
+    curtainGrommetQty52: parseFloat(document.getElementById("s-curtain-grommet-qty-52").value) || 0,
+    curtainGrommetQty37: parseFloat(document.getElementById("s-curtain-grommet-qty-37").value) || 1,
+    curtainEyeletRmbPair: parseFloat(document.getElementById("s-curtain-eyelet-rmb-pair").value) || 0,
+    curtainRmbFx: parseFloat(document.getElementById("s-curtain-rmb-fx").value) || 1,
+    curtainTrimNonwovenLabels: parseFloat(document.getElementById("s-curtain-trim-nonwoven-labels").value) || 0,
+    curtainTrimPkgboxCarton: parseFloat(document.getElementById("s-curtain-trim-pkgbox-carton").value) || 0,
+    curtainTrimSewing: parseFloat(document.getElementById("s-curtain-trim-sewing").value) || 0,
+    curtainTrimFobInland: parseFloat(document.getElementById("s-curtain-trim-fob-inland").value) || 0,
+    curtainPkgSingle: parseFloat(document.getElementById("s-curtain-pkg-single").value) || 0,
+    curtainPkgPair: parseFloat(document.getElementById("s-curtain-pkg-pair").value) || 0,
   };
 }
 
@@ -3343,8 +3460,8 @@ function computeCushionFabricBasis(sizeKey, construction, frontPrice, frontWidth
   return result;
 }
 
-function computeSize(width, length, isPair, price, quotedWidth, s) {
-  const usd = priceUsdPerPanel(width, length, price, quotedWidth, isPair);
+function computeSize(width, length, isPair, price, quotedWidth, s, mountType) {
+  const usd = priceUsdPerPanel(width, length, price, quotedWidth, isPair, s, mountType);
   const landed = landedCad(usd, isPair, s);
   const sell = sellCad(landed, s);
   const msrp = msrpCad(sell, s);
@@ -3424,7 +3541,7 @@ function toggleSettings() {
   chevron.innerHTML = open ? "&#9652;" : "&#9662;";
 }
 
-const SETTINGS_IDS = ["s-duty", "s-duty-shell", "s-duty-filled", "s-cushion-waste", "s-cushion-labor", "s-cushion-factory-profit", "s-cushion-fringe-cost", "s-cushion-freight", "s-cushion-container-cost", "s-cushion-container-shells", "s-cushion-wh", "s-freight", "s-container-cost", "s-container-panels", "s-fx", "s-wh", "s-sell-gm", "s-msrp-gm", "s-bank-markup"];
+const SETTINGS_IDS = ["s-duty", "s-duty-shell", "s-duty-filled", "s-cushion-waste", "s-cushion-labor", "s-cushion-factory-profit", "s-cushion-fringe-cost", "s-cushion-freight", "s-cushion-container-cost", "s-cushion-container-shells", "s-cushion-wh", "s-freight", "s-container-cost", "s-container-panels", "s-fx", "s-wh", "s-sell-gm", "s-msrp-gm", "s-bank-markup", "s-curtain-grommet-qty-50", "s-curtain-grommet-qty-52", "s-curtain-grommet-qty-37", "s-curtain-eyelet-rmb-pair", "s-curtain-rmb-fx", "s-curtain-trim-nonwoven-labels", "s-curtain-trim-pkgbox-carton", "s-curtain-trim-sewing", "s-curtain-trim-fob-inland", "s-curtain-pkg-single", "s-curtain-pkg-pair"];
 
 async function saveSettings() {
   const values = {};
@@ -3442,6 +3559,38 @@ async function loadSettings() {
       });
     } catch (e) { /* use defaults */ }
   }
+}
+
+// The exact values these fields shipped with -- verified bit-for-bit
+// identical to the original hardcoded constants they replaced. A safety
+// net for if adjustments drift too far from the real baseline over time.
+const CURTAIN_FACTORY_DEFAULTS = {
+  "s-curtain-grommet-qty-50": "8",
+  "s-curtain-grommet-qty-52": "8",
+  "s-curtain-grommet-qty-37": "6",
+  "s-curtain-eyelet-rmb-pair": "1.92",
+  "s-curtain-rmb-fx": "6.8",
+  "s-curtain-trim-nonwoven-labels": "0.54",
+  "s-curtain-trim-pkgbox-carton": "0.30",
+  "s-curtain-trim-sewing": "7.00",
+  "s-curtain-trim-fob-inland": "0.09",
+  "s-curtain-pkg-single": "0.20",
+  "s-curtain-pkg-pair": "0.25"
+};
+
+function resetCurtainFactoryDefaults() {
+  showConfirm(
+    "Reset all Curtain factory add-on fields (grommets, trim, packaging) back to their original values? Any adjustments you've made to these specifically will be lost \u2014 nothing else in Settings is affected.",
+    async function() {
+      Object.keys(CURTAIN_FACTORY_DEFAULTS).forEach(function(id) {
+        document.getElementById(id).value = CURTAIN_FACTORY_DEFAULTS[id];
+      });
+      await saveSettings();
+      renderPriceCards();
+      renderPriceTable();
+      showToast("Curtain factory add-ons reset to original defaults.", "success");
+    }
+  );
 }
 
 function updateFreightReference() {
@@ -3541,7 +3690,7 @@ function renderPriceCards() {
     card.className = "price-card" + (def.pair ? " pair" : "");
     let statsHtml, addBtnHtml = "";
     if (valid) {
-      const r = computeSize(def.w, def.l, def.pair, price, width, s);
+      const r = computeSize(def.w, def.l, def.pair, price, width, s, selectedMountType);
       statsHtml =
         '<div class="price-stat"><span class="l">Price (USD)</span><span class="v">' + fmt(r.usd) + '</span></div>' +
         '<div class="price-stat"><span class="l">Landed (CAD)</span><span class="v">' + fmt(r.landed) + '</span></div>' +
@@ -3700,7 +3849,7 @@ function renderPriceTable() {
 
   let rows = "";
   SIZE_DEFS.forEach(function(def) {
-    const r = valid ? computeSize(def.w, def.l, def.pair, price, width, s) : null;
+    const r = valid ? computeSize(def.w, def.l, def.pair, price, width, s, selectedMountType) : null;
     rows +=
       '<tr class="' + (def.pair ? "pair-row" : "") + '">' +
       '<td class="size-cell">' + def.label + (def.pair ? '<span class="pair-tag">2 PANELS</span>' : '') + '</td>' +
@@ -3789,6 +3938,21 @@ function setCurtainType(type) {
   document.querySelectorAll("#curtain-type-group .chip").forEach(function(btn) {
     btn.classList.toggle("selected", btn.textContent === selectedCurtainType);
   });
+}
+
+// Defaults to GROMMET (not null) -- unlike Curtain Type, this always has a
+// real value, since every panel is one of these three, and GROMMET is the
+// historical default that every quote saved before this feature existed
+// is treated as.
+let selectedMountType = "GROMMET";
+
+function setMountType(type) {
+  selectedMountType = type;
+  document.querySelectorAll("#mount-type-group .chip").forEach(function(btn) {
+    btn.classList.toggle("selected", btn.getAttribute("data-mount") === type);
+  });
+  renderPriceCards();
+  renderPriceTable();
 }
 
 // ---------------------------------------------------------------
@@ -4162,6 +4326,7 @@ async function renderMeetingsHome() {
         '<div class="meeting-row-sub">' + escapeHtml(m.customer || "No customer") + ' &middot; ' + escapeHtml(catLabel) + ' &middot; ' + escapeHtml(m.createdDate) + '</div>' +
       '</div>' +
       '<span class="meeting-status-badge ' + m.status + '">' + (m.status === "active" ? "Active" : "Finalized") + '</span>' +
+      '<button class="quote-delete" title="Delete this meeting" onclick="event.stopPropagation(); deleteMeeting(\'' + m.id + '\')">&#128465;</button>' +
     '</div>';
   }).join("");
 }
@@ -4299,6 +4464,55 @@ async function toggleMeetingFinalized() {
   }
   await saveMeetings(meetings);
   renderMeetingDetail(meeting.id);
+}
+
+// Deletes the meeting record itself, but never the quotes, cart items, or
+// photos tagged to it -- those are real data that outlives the meeting
+// wrapper, so they're untagged (meetingId cleared) rather than removed.
+async function deleteMeeting(meetingId) {
+  if (!meetingId) return;
+  const meetings = await getMeetings();
+  const meeting = meetings.find(function(m) { return m.id === meetingId; });
+  if (!meeting) return;
+
+  const quotes = await getQuotes();
+  const taggedQuoteCount = quotes.filter(function(q) { return q.meetingId === meetingId; }).length;
+  const taggedCartCount = customerCart.filter(function(c) { return c.meetingId === meetingId; }).length;
+  const taggedTotal = taggedQuoteCount + taggedCartCount;
+
+  let message = "Delete \u201c" + meeting.name + "\u201d?";
+  if (taggedTotal > 0) {
+    message += " " + taggedTotal + " item" + (taggedTotal === 1 ? "" : "s") + " tagged to it will stay \u2014 just untagged from this meeting, not deleted.";
+  }
+  message += " This cannot be undone.";
+
+  showConfirm(message, async function() {
+    let quotesChanged = false;
+    quotes.forEach(function(q) { if (q.meetingId === meetingId) { q.meetingId = null; quotesChanged = true; } });
+    if (quotesChanged) await saveQuotes(quotes);
+
+    let cartChanged = false;
+    customerCart.forEach(function(c) { if (c.meetingId === meetingId) { c.meetingId = null; cartChanged = true; } });
+    if (cartChanged) await saveCart();
+
+    const sessionPhotos = await getSessionPhotos();
+    let photosChanged = false;
+    sessionPhotos.forEach(function(p) { if (p.meetingId === meetingId) { p.meetingId = null; photosChanged = true; } });
+    if (photosChanged) await saveSessionPhotos(sessionPhotos);
+
+    if (activeMeetingId === meetingId) await setActiveMeetingId(null);
+
+    const remaining = meetings.filter(function(m) { return m.id !== meetingId; });
+    await saveMeetings(remaining);
+
+    showToast("\u201c" + meeting.name + "\u201d deleted.", "success");
+
+    if (document.getElementById("screen-meeting-detail").classList.contains("active")) {
+      closeMeetingDetail();
+    } else {
+      renderMeetingsHome();
+    }
+  });
 }
 
 async function downloadMeetingSummary() {
@@ -8686,7 +8900,7 @@ async function saveQuote() {
       return;
     }
     const computedPrices = SIZE_DEFS.map(function(def) {
-      const r = computeSize(def.w, def.l, def.pair, price, width, s);
+      const r = computeSize(def.w, def.l, def.pair, price, width, s, selectedMountType);
       return { label: def.label, pair: def.pair, usd: r.usd, landed: r.landed, sell: r.sell, msrp: r.msrp };
     });
     fieldsFromForm = {
@@ -8694,6 +8908,7 @@ async function saveQuote() {
       vendor: document.getElementById("vendor").value || "(no vendor)",
       item: document.getElementById("item").value || "",
       curtainType: selectedCurtainType || "",
+      mountType: selectedMountType || "GROMMET",
       notes: document.getElementById("notes").value || "",
       customer: document.getElementById("quote-customer").value || "",
       photo: productPhotoDataUrl || "",
@@ -8796,6 +9011,10 @@ function resetCalculatorFormFields() {
   document.querySelectorAll("#curtain-type-group .chip").forEach(function(btn) {
     btn.classList.remove("selected");
   });
+  selectedMountType = "GROMMET";
+  document.querySelectorAll("#mount-type-group .chip").forEach(function(btn) {
+    btn.classList.toggle("selected", btn.getAttribute("data-mount") === "GROMMET");
+  });
   document.getElementById("cushion-quote-basis").value = "";
   updatePriceLabel();
   document.getElementById("cushion-fabric-width").value = "";
@@ -8879,6 +9098,13 @@ async function loadQuoteForEdit(id) {
     selectedCurtainType = entry.curtainType || null;
     document.querySelectorAll("#curtain-type-group .chip").forEach(function(btn) {
       btn.classList.toggle("selected", btn.textContent === selectedCurtainType);
+    });
+    // Any quote saved before Mount Type existed has no mountType field --
+    // treat that the same as GROMMET, since that's what it was actually
+    // priced as historically.
+    selectedMountType = entry.mountType || "GROMMET";
+    document.querySelectorAll("#mount-type-group .chip").forEach(function(btn) {
+      btn.classList.toggle("selected", btn.getAttribute("data-mount") === selectedMountType);
     });
   }
 
@@ -9488,16 +9714,38 @@ async function renderRunList() {
 
   container.innerHTML = "";
   container.appendChild(listEl);
+  syncRunListSelectAllCheckbox();
+}
+
+function syncRunListSelectAllCheckbox() {
+  const box = document.getElementById("runlist-select-all-checkbox");
+  if (!box) return;
+  const rowBoxes = document.querySelectorAll("#runlist-list .quote-select-checkbox");
+  box.checked = rowBoxes.length > 0 && Array.from(rowBoxes).every(function(cb) { return cb.checked; });
+}
+
+// Selects or deselects every currently-listed item at once -- pushing a
+// whole scan run to a Meeting/Sourcing/Customer Quote shouldn't require
+// tapping each row by hand.
+function toggleSelectAllRunList(checked) {
+  document.querySelectorAll("#runlist-list .quote-select-checkbox").forEach(function(cb) {
+    cb.checked = checked;
+    const id = cb.getAttribute("data-id");
+    if (checked) runListSelectedIds.add(id); else runListSelectedIds.delete(id);
+  });
+  renderRunListSelectionToolbar();
 }
 
 function toggleRunListSelection(id, checked) {
   if (checked) runListSelectedIds.add(id); else runListSelectedIds.delete(id);
+  syncRunListSelectAllCheckbox();
   renderRunListSelectionToolbar();
 }
 
 function clearRunListSelection() {
   runListSelectedIds.clear();
   document.querySelectorAll("#runlist-list .quote-select-checkbox").forEach(function(cb) { cb.checked = false; });
+  syncRunListSelectAllCheckbox();
   renderRunListSelectionToolbar();
 }
 
