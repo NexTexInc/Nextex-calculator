@@ -2805,11 +2805,19 @@
         <button type="button" class="cq-back-btn" onclick="closeRunListScreen()">&#8592; Back</button>
         <span class="section-label" style="margin:0;">Run List</span>
       </div>
-      <div class="field-hint" style="margin-bottom:10px;">Scan fabric hanger QR codes to build a working list, drawn from your saved quotes. Nothing here is a new quote -- it's a live, disposable subset you can review, filter, export, or send to a Meeting, Sourcing session, or Customer Quote.</div>
+      <div class="field-hint" style="margin-bottom:10px;">Type a SKU, scan it with a scan gun, or use your phone's camera. Each adds that item to a live working list, drawn from your saved quotes -- not a new quote. Review, filter, export, or send it to a Meeting, Sourcing session, or Customer Quote.</div>
 
-      <button type="button" class="btn btn-save" style="width:100%; padding:16px; font-size:16px; margin-bottom:8px;" onclick="triggerRunListScan()">&#128247; Scan Next Item</button>
-      <input type="file" id="runlist-scan-input" accept="image/*" capture="environment" style="display:none;" onchange="handleRunListScan(event)">
+      <div class="field-row" style="gap:8px; margin-bottom:6px;">
+        <div class="clearable-input-wrap" style="flex:1;">
+          <input type="text" id="runlist-sku-input" placeholder="Type or scan SKU..." autocomplete="off" autocapitalize="off" oninput="toggleClearBtn(this)" onkeydown="handleRunListSkuKeydown(event)">
+          <button type="button" class="input-clear-btn" onclick="clearInputField(this)" style="display:none;">&#10005;</button>
+        </div>
+        <button type="button" class="scan-btn" style="flex:none; padding:0 16px;" onclick="submitRunListSku()">Add</button>
+      </div>
       <div class="field-hint" id="runlist-scan-status" style="margin-top:-2px; margin-bottom:10px; text-align:center;"></div>
+
+      <button type="button" class="scan-btn" style="width:100%; margin-bottom:10px;" onclick="triggerRunListScan()">&#128247; Or Scan With Phone Camera</button>
+      <input type="file" id="runlist-scan-input" accept="image/*" capture="environment" style="display:none;" onchange="handleRunListScan(event)">
 
       <div class="field-row" style="gap:8px; margin-bottom:10px; flex-wrap:wrap;">
         <button type="button" class="chip" onclick="toggleRunListSortPanel()" id="runlist-sort-toggle" style="flex:1 1 auto;">Sort &#9662;</button>
@@ -9117,11 +9125,69 @@ function openRunListScreen() {
   document.getElementById("screen-runlist").classList.add("active");
   document.getElementById("tabbar").style.display = "none";
   renderRunList();
+  // Cursor lands in the SKU field immediately, same habit as the Saved
+  // Quotes search bar -- the scan gun just types into whatever's focused,
+  // so the field needs to already be live the moment this screen opens.
+  setTimeout(function() {
+    const input = document.getElementById("runlist-sku-input");
+    if (input) input.focus();
+  }, 50);
 }
 
 function closeRunListScreen() {
   document.getElementById("tabbar").style.display = "flex";
   showScreen(screenBeforeRunList);
+}
+
+// Scan-gun / manual-typing path: the gun emulates a keyboard and sends
+// Enter after each read, exactly like the existing Saved Quotes search
+// habit. On success or "already in list", the field clears and refocuses
+// immediately so the very next gun read lands ready to go with no tap in
+// between -- the camera path below stays as the secondary, phone-only route.
+function handleRunListSkuKeydown(event) {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    submitRunListSku();
+  }
+}
+
+async function submitRunListSku() {
+  const input = document.getElementById("runlist-sku-input");
+  const scannedItem = input.value.trim();
+  if (!scannedItem) return;
+
+  const quotes = await getQuotes();
+  const match = quotes.find(function(q) { return (q.item || "").toLowerCase() === scannedItem.toLowerCase(); });
+
+  const statusEl = document.getElementById("runlist-scan-status");
+
+  if (!match) {
+    statusEl.textContent = "";
+    alert("\u201c" + scannedItem + "\u201d is not part of the saved quotes database.");
+    input.value = "";
+    toggleClearBtn(input);
+    input.focus();
+    return;
+  }
+
+  const runList = await getRunList();
+  if (runList.some(function(r) { return r.id === match.id; })) {
+    statusEl.textContent = "Already in this list: " + match.item;
+    showToast("\u201c" + match.item + "\u201d is already in this list.", "error");
+    input.value = "";
+    toggleClearBtn(input);
+    input.focus();
+    return;
+  }
+
+  runList.push({ id: match.id, scannedAt: new Date().toISOString() });
+  await saveRunListItems(runList);
+  statusEl.textContent = "Added: " + match.item;
+  showToast("Added \u201c" + match.item + "\u201d.", "success");
+  input.value = "";
+  toggleClearBtn(input);
+  input.focus();
+  renderRunList();
 }
 
 function triggerRunListScan() {
