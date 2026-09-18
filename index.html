@@ -1761,6 +1761,8 @@
               <input type="number" id="s-curtain-rmb-fx" step="0.01" value="6.8">
             </div>
           </div>
+          <button type="button" class="scan-btn" style="width:100%; margin-bottom:8px;" onclick="fetchRmbRate()" id="rmb-fetch-btn">Fetch Official RMB/USD Rate</button>
+          <div id="rmb-rate-status" style="margin-bottom:8px;">Not fetched yet. Sourced from the European Central Bank's daily reference rate (published on business days, ~4pm CET) &mdash; a real mid-market reference, not China's own PBOC daily fix and not a supplier/bank transaction rate.</div>
           <div class="field-hint">Price per grommet = (Eyelet &yen;/pair &divide; 2 &divide; RMB rate) &divide; 37"W grommet qty, then &times; the panel's own grommet qty above. This RMB rate only converts grommet/trim costs to USD -- it's separate from the main FX rate further down, which converts USD to CAD for landed cost.</div>
 
           <div class="settings-sub">Flat trim &amp; packaging (Curtains, per panel)</div>
@@ -3697,6 +3699,40 @@ async function fetchBocRate() {
     statusEl.innerHTML = '<span style="color:var(--rust);">Could not fetch a rate from Bank of Canada or the ECB backup (last error: ' +
       escapeHtml(fkError.message) + '). Your FX rate field above is unchanged \u2014 enter or check it manually at <span style="text-decoration:underline;">bankofcanada.ca/rates/exchange/daily-exchange-rates</span>.</span>';
     showToast("Could not fetch an official rate from either source.", "error");
+  }
+  btn.disabled = false;
+}
+
+// RMB/USD reference rate for the Curtain grommet/trim conversion above.
+// Sourced from Frankfurter (European Central Bank), the same reliable,
+// browser-friendly source used as the CAD fallback. This is a real market
+// reference rate, but distinct from the PBOC's own daily administrative
+// fix -- worth knowing given China's managed-float system, even though
+// the two track closely day to day. Applied directly (no markup step,
+// unlike the bank markup above) since this feeds internal cost
+// conversion, not a retail transaction.
+async function fetchRmbRate() {
+  const statusEl = document.getElementById("rmb-rate-status");
+  const btn = document.getElementById("rmb-fetch-btn");
+  btn.disabled = true;
+  statusEl.textContent = "Fetching\u2026";
+
+  try {
+    const url = "https://api.frankfurter.dev/v1/latest?from=USD&to=CNY";
+    const data = await fetchOneBocSource(url);
+    const rate = data && data.rates && parseFloat(data.rates.CNY);
+    const date = data && data.date;
+    if (!rate || !date) throw new Error("Unexpected response format");
+
+    document.getElementById("s-curtain-rmb-fx").value = rate.toFixed(4);
+    saveSettings();
+    renderPriceCards();
+    renderPriceTable();
+    statusEl.innerHTML = '<b style="color:var(--navy);">ECB reference rate applied: ' + rate.toFixed(4) + '</b> as of ' + date + ' &mdash; the RMB rate field above has been updated directly.';
+    showToast("RMB/USD rate fetched and applied.", "success");
+  } catch (e) {
+    statusEl.innerHTML = '<span style="color:var(--rust);">Could not fetch the rate (last error: ' + escapeHtml(e.message) + '). Your RMB rate field above is unchanged \u2014 enter it manually if needed.</span>';
+    showToast("Could not fetch the RMB/USD rate.", "error");
   }
   btn.disabled = false;
 }
