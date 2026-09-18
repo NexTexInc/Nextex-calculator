@@ -1403,10 +1403,15 @@
       <button type="button" class="hamburger-submenu-item" onclick="openDeletedItemsScreen()">Deleted Items</button>
     </div>
 
-    <button type="button" class="hamburger-menu-item" onclick="openRunListScreen()">
+    <button type="button" class="hamburger-menu-item" onclick="toggleHamburgerSubmenu('runlist')">
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><path d="M3 14h7v7H3z"></path><path d="M14 17h7"></path><path d="M14 20h7"></path></svg>
       <span style="flex:1;">Run List</span>
+      <span class="hamburger-chevron" id="hamburger-chevron-runlist">&#9662;</span>
     </button>
+    <div class="hamburger-submenu" id="hamburger-submenu-runlist" style="display:none;">
+      <button type="button" class="hamburger-submenu-item" onclick="openRunListScreen()">Scan / Current List</button>
+      <button type="button" class="hamburger-submenu-item" onclick="openSavedRunListsScreen()">Saved Lists &#8594;</button>
+    </div>
 
     <button type="button" class="hamburger-menu-item" onclick="runStorageDiagnostics()">
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16"></path><path d="M8 20V10"></path><path d="M13 20V4"></path><path d="M18 20v-7"></path></svg>
@@ -2850,6 +2855,17 @@
         <button type="button" class="scan-btn" style="flex:1;" onclick="clearRunList()">Clear List</button>
         <button type="button" class="scan-btn" style="flex:1;" onclick="promptSaveRunListAs()">Save As New List</button>
       </div>
+    </div>
+  </div>
+
+  <div class="screen" id="screen-saved-runlists">
+    <div class="content">
+      <div class="cq-back-header">
+        <button type="button" class="cq-back-btn" onclick="closeSavedRunListsScreen()">&#8592; Back</button>
+        <span class="section-label" style="margin:0;">Saved Lists</span>
+      </div>
+      <div class="field-hint" style="margin-bottom:10px;">Run lists you've saved with a name. Stored on this device's browser storage, not a file -- tap one to reopen it as your current working list.</div>
+      <div id="saved-runlists-list"></div>
     </div>
   </div>
 
@@ -9139,6 +9155,99 @@ function closeRunListScreen() {
   showScreen(screenBeforeRunList);
 }
 
+// ---------------------------------------------------------------
+// Saved Lists: named archives of a run list's item ids. Stored in this
+// device's browser storage (nextex_named_runlists) -- there's no file or
+// path, since this is a web app, not a filesystem. This screen is what
+// makes that storage actually visible and reachable again.
+// ---------------------------------------------------------------
+async function getNamedRunLists() {
+  const raw = await storageGet("nextex_named_runlists");
+  try { return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
+}
+async function saveNamedRunLists(list) {
+  return await storageSet("nextex_named_runlists", JSON.stringify(list));
+}
+
+let screenBeforeSavedRunLists = "calc";
+
+function openSavedRunListsScreen() {
+  document.getElementById("hamburger-drawer").classList.remove("show");
+  document.getElementById("hamburger-backdrop").classList.remove("show");
+  const activeScreen = document.querySelector(".screen.active");
+  if (activeScreen) screenBeforeSavedRunLists = activeScreen.id.replace("screen-", "");
+  document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
+  document.getElementById("screen-saved-runlists").classList.add("active");
+  document.getElementById("tabbar").style.display = "none";
+  renderSavedRunListsScreen();
+}
+
+function closeSavedRunListsScreen() {
+  document.getElementById("tabbar").style.display = "flex";
+  showScreen(screenBeforeSavedRunLists);
+}
+
+async function renderSavedRunListsScreen() {
+  const namedLists = await getNamedRunLists();
+  const container = document.getElementById("saved-runlists-list");
+  if (namedLists.length === 0) {
+    container.innerHTML = '<div class="log-empty"><div class="icon">&#128203;</div>No saved lists yet. Build a run list, then tap Save As New List.</div>';
+    return;
+  }
+  container.innerHTML = namedLists.map(function(l, idx) {
+    const dateStr = l.savedAt ? new Date(l.savedAt).toLocaleDateString() : "";
+    const count = l.itemIds ? l.itemIds.length : 0;
+    return '<div class="quote-row">' +
+      '<div class="quote-main-line" style="cursor:pointer;" onclick="reopenSavedRunList(' + idx + ')">' +
+        '<div class="quote-body">' +
+          '<div class="quote-line"><span class="quote-item">' + escapeHtml(l.name) + '</span></div>' +
+          '<div class="quote-line">' +
+            '<div class="quote-vendor-row"><span class="quote-vendor">' + count + ' item' + (count === 1 ? "" : "s") + '</span></div>' +
+            '<span class="quote-size">' + escapeHtml(dateStr) + '</span>' +
+          '</div>' +
+        '</div>' +
+        '<button class="quote-delete" title="Delete this saved list" onclick="event.stopPropagation(); deleteSavedRunList(' + idx + ')">&#128465;</button>' +
+      '</div>' +
+    '</div>';
+  }).join("");
+}
+
+async function reopenSavedRunList(idx) {
+  const namedLists = await getNamedRunLists();
+  const target = namedLists[idx];
+  if (!target) return;
+
+  const currentRunList = await getRunList();
+  const doReopen = async function() {
+    const runListEntries = target.itemIds.map(function(id) { return { id: id, scannedAt: new Date().toISOString() }; });
+    await saveRunListItems(runListEntries);
+    openRunListScreen();
+    showToast("Reopened \u201c" + target.name + "\u201d as your current list.", "success");
+  };
+
+  if (currentRunList.length > 0) {
+    showConfirm(
+      "Your current working list has " + currentRunList.length + " item" + (currentRunList.length === 1 ? "" : "s") +
+      " that hasn't been saved. Replace it with \u201c" + target.name + "\u201d?",
+      doReopen
+    );
+  } else {
+    await doReopen();
+  }
+}
+
+async function deleteSavedRunList(idx) {
+  const namedLists = await getNamedRunLists();
+  const target = namedLists[idx];
+  if (!target) return;
+  showConfirm("Delete the saved list \u201c" + target.name + "\u201d? This cannot be undone.", async function() {
+    namedLists.splice(idx, 1);
+    await saveNamedRunLists(namedLists);
+    renderSavedRunListsScreen();
+    showToast("Deleted.", "success");
+  });
+}
+
 // Scan-gun / manual-typing path: the gun emulates a keyboard and sends
 // Enter after each read, exactly like the existing Saved Quotes search
 // habit. On success or "already in list", the field clears and refocuses
@@ -9404,27 +9513,95 @@ function renderRunListSelectionToolbar() {
   el.style.display = "";
   el.innerHTML =
     '<div class="selection-toolbar">' +
-      '<span class="sel-count">' + n + ' selected \u2014 downloads and Add to Customer Quote below will use just these</span>' +
+      '<span class="sel-count">' + n + ' selected \u2014 downloads and the buttons below will use just these</span>' +
       '<div class="sel-actions">' +
-        '<button type="button" class="chip" onclick="addSelectedRunListToCustomerQuote()">Add to Customer Quote</button>' +
+        '<button type="button" class="chip" onclick="bulkPushSelectedRunListTo(\'customer\')">Add to Customer Quote</button>' +
+        '<button type="button" class="chip" onclick="bulkPushSelectedRunListTo(\'meeting\')">Add to Meeting</button>' +
+        '<button type="button" class="chip" onclick="bulkPushSelectedRunListTo(\'sourcing\')">Add to Sourcing</button>' +
         '<button type="button" class="chip" onclick="removeSelectedFromRunList()">Remove from List</button>' +
         '<button type="button" class="chip" onclick="clearRunListSelection()">Clear Selection</button>' +
       '</div>' +
     '</div>';
 }
 
-// Reuses the Saved Quotes cart/meeting/sourcing flow verbatim by briefly
-// lending it this screen's selection -- same well-tested logic (including
-// the once-per-batch meeting/sourcing tag prompt), no separate copy of it.
-async function addSelectedRunListToCustomerQuote() {
+// Three explicit destinations rather than one button with a contingent
+// follow-up prompt. "Add to Customer Quote" never tags a meeting/sourcing
+// session even if one happens to be active; "Add to Meeting"/"Add to
+// Sourcing" require one to actually be active first (that's what makes
+// the tag meaningful) and tag it immediately, no extra prompt.
+async function bulkPushSelectedRunListTo(destination) {
   if (runListSelectedIds.size === 0) {
     showToast("No items selected.", "error");
     return;
   }
-  const savedSelection = selectedQuoteIds;
-  selectedQuoteIds = new Set(runListSelectedIds);
-  await bulkAddSelectedQuotesToCustomerQuote();
-  selectedQuoteIds = savedSelection;
+
+  let meeting = null, sourcing = null;
+  if (destination === "meeting") {
+    meeting = await getActiveMeeting();
+    if (!meeting) {
+      showToast("No active meeting. Open Meetings and set one active first.", "error");
+      return;
+    }
+  } else if (destination === "sourcing") {
+    sourcing = await getActiveSourcing();
+    if (!sourcing) {
+      showToast("No active sourcing session. Open Sourcing and set one active first.", "error");
+      return;
+    }
+  }
+
+  const quotes = await getQuotes();
+  const s = getSettings();
+  const newKeys = [];
+  let addedCount = 0, skippedCount = 0;
+
+  runListSelectedIds.forEach(function(id) {
+    const entry = quotes.find(function(q) { return q.id === id; });
+    if (!entry) { skippedCount++; return; }
+
+    const headline = (entry.prices && entry.prices[0]) ? entry.prices[0] : null;
+    const cushionPrice = (!headline && entry.category === "cushions") ? computeCushionPriceForEntry(entry, s) : null;
+    let sizeLabel = "", sellPrice = null, pair = false;
+    if (headline) {
+      sizeLabel = headline.label;
+      sellPrice = headline.sell;
+      pair = !!headline.pair;
+    } else if (cushionPrice) {
+      sizeLabel = CUSHION_SIZE_LABELS[entry.cushionSize] || entry.cushionSize || "";
+      sellPrice = cushionPrice.sell;
+    }
+    if (sellPrice === null || typeof sellPrice !== "number") { skippedCount++; return; }
+
+    const cartKey = "calc_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
+    customerCart.push({
+      key: cartKey,
+      item: entry.item || "(no item #)",
+      vendor: (entry.vendor && entry.vendor !== "(no vendor)") ? entry.vendor : "",
+      category: entry.category === "cushions" ? "Cushion" : "Curtain",
+      sizeLabel: sizeLabel + (pair ? " (pair)" : ""),
+      sellPrice: sellPrice,
+      qty: 1
+    });
+    newKeys.push(cartKey);
+    addedCount++;
+  });
+
+  if (addedCount > 0) await saveCart();
+  updateCartBadge();
+
+  if (destination === "meeting" && meeting) {
+    for (const k of newKeys) await tagCartItemToMeeting(k, meeting.id);
+  } else if (destination === "sourcing" && sourcing) {
+    for (const k of newKeys) await tagCartItemToSourcing(k, sourcing.id);
+  }
+
+  const destLabel = destination === "meeting" ? ("\u201c" + meeting.name + "\u201d")
+    : destination === "sourcing" ? ("\u201c" + sourcing.name + "\u201d")
+    : "Customer Quote";
+  let summary = addedCount + " quote" + (addedCount === 1 ? "" : "s") + " added to " + destLabel + ".";
+  if (skippedCount > 0) summary += " " + skippedCount + " skipped (no pricing yet).";
+  showToast(summary, addedCount > 0 ? "success" : "error");
+
   runListSelectedIds.clear();
   renderRunListSelectionToolbar();
   renderRunList();
@@ -9483,18 +9660,16 @@ async function confirmSaveRunListAs() {
     return;
   }
   const runList = await getRunList();
-  const raw = await storageGet("nextex_named_runlists");
-  let namedLists = [];
-  try { namedLists = raw ? JSON.parse(raw) : []; } catch (e) { namedLists = []; }
+  const namedLists = await getNamedRunLists();
   namedLists.push({ name: name, itemIds: runList.map(function(r) { return r.id; }), savedAt: new Date().toISOString() });
-  await storageSet("nextex_named_runlists", JSON.stringify(namedLists));
+  await saveNamedRunLists(namedLists);
 
   document.getElementById("save-runlist-banner").classList.remove("show");
   await saveRunListItems([]);
   runListSelectedIds.clear();
   renderRunListSelectionToolbar();
   renderRunList();
-  showToast("Saved as \u201c" + name + "\u201d. Starting a fresh list.", "success");
+  showToast("Saved as \u201c" + name + "\u201d \u2014 find it under Run List \u2192 Saved Lists. Starting a fresh list.", "success");
 }
 
 // Export menu: reuses the exact Saved Quotes export builders with an
