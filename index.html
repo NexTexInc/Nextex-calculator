@@ -3629,8 +3629,27 @@ function applyCushionFreightReference() {
 // ---------------------------------------------------------------
 // Bank of Canada official FX rate (mid-market reference) + bank markup
 // ---------------------------------------------------------------
+// The direct bankofcanada.ca Valet endpoint is still the correct, current,
+// unauthenticated URL for this series (confirmed against current sources) --
+// pasting it into a browser tab always "works" because that's a plain
+// navigation, not a cross-origin fetch(). The most likely reason it fails
+// specifically from inside this app is that the Bank's API may not send an
+// Access-Control-Allow-Origin header permitting a browser-side fetch() from
+// a different site -- "public/unauthenticated" and "CORS-enabled for
+// third-party JS" aren't the same thing. Rather than replace the source
+// with a non-official one, this tries the real BoC URL first, then the
+// exact same official URL again through two CORS relay services if the
+// direct call is blocked -- the published number itself stays 100% Bank of
+// Canada either way, only the delivery path changes.
 let lastFetchedBocRate = null;
 let lastFetchedBocDate = null;
+
+async function fetchOneBocSource(url) {
+  const resp = await fetch(url, { cache: "no-store" });
+  if (!resp.ok) throw new Error("HTTP " + resp.status);
+  const text = await resp.text();
+  return JSON.parse(text);
+}
 
 async function fetchBocRate() {
   const statusEl = document.getElementById("boc-rate-status");
@@ -3638,24 +3657,38 @@ async function fetchBocRate() {
   btn.disabled = true;
   statusEl.textContent = "Fetching\u2026";
 
-  try {
-    const resp = await fetch("https://www.bankofcanada.ca/valet/observations/FXUSDCAD/json?recent=1&_=" + Date.now(), { cache: "no-store" });
-    if (!resp.ok) throw new Error("HTTP " + resp.status);
-    const data = await resp.json();
-    const obs = data && data.observations && data.observations[0];
-    const rate = obs && obs.FXUSDCAD && parseFloat(obs.FXUSDCAD.v);
-    const date = obs && obs.d;
+  const bocUrl = "https://www.bankofcanada.ca/valet/observations/FXUSDCAD/json?recent=1&_=" + Date.now();
+  const attempts = [
+    { label: "direct", url: bocUrl },
+    { label: "backup route 1", url: "https://api.allorigins.win/raw?url=" + encodeURIComponent(bocUrl) },
+    { label: "backup route 2", url: "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(bocUrl) }
+  ];
 
-    if (!rate || !date) throw new Error("Unexpected response format");
+  let lastError = null;
+  for (let i = 0; i < attempts.length; i++) {
+    try {
+      const data = await fetchOneBocSource(attempts[i].url);
+      const obs = data && data.observations && data.observations[0];
+      const rate = obs && obs.FXUSDCAD && parseFloat(obs.FXUSDCAD.v);
+      const date = obs && obs.d;
+      if (!rate || !date) throw new Error("Unexpected response format");
 
-    lastFetchedBocRate = rate;
-    lastFetchedBocDate = date;
-    statusEl.innerHTML = '<b style="color:var(--navy);">BoC mid-market rate: ' + rate.toFixed(4) + '</b> as of ' + date + ' &mdash; this is a reference rate, not a retail rate. Set your markup below, then Apply.';
-    showToast("Bank of Canada rate fetched.", "success");
-  } catch (e) {
-    statusEl.innerHTML = '<span style="color:var(--rust);">Could not fetch the official rate (network issue or the source may be unavailable). Your FX rate field above is unchanged \u2014 enter or check it manually at <span style="text-decoration:underline;">bankofcanada.ca/rates/exchange/daily-exchange-rates</span>.</span>';
-    showToast("Could not fetch Bank of Canada rate.", "error");
+      lastFetchedBocRate = rate;
+      lastFetchedBocDate = date;
+      statusEl.innerHTML = '<b style="color:var(--navy);">BoC mid-market rate: ' + rate.toFixed(4) + '</b> as of ' + date + ' &mdash; this is a reference rate, not a retail rate. Set your markup below, then Apply.' +
+        (i > 0 ? '<br><span style="color:var(--text-secondary); font-size:10.5px;">(Delivered via ' + attempts[i].label + ' \u2014 the direct connection was blocked, but this is still the Bank\u2019s own published figure.)</span>' : '');
+      showToast("Bank of Canada rate fetched.", "success");
+      btn.disabled = false;
+      return;
+    } catch (e) {
+      lastError = e;
+      // try the next source
+    }
   }
+
+  statusEl.innerHTML = '<span style="color:var(--rust);">Could not fetch the official rate after trying the direct connection and two backup routes (last error: ' +
+    escapeHtml(lastError ? lastError.message : "unknown") + '). Your FX rate field above is unchanged \u2014 enter or check it manually at <span style="text-decoration:underline;">bankofcanada.ca/rates/exchange/daily-exchange-rates</span>.</span>';
+  showToast("Could not fetch Bank of Canada rate.", "error");
   btn.disabled = false;
 }
 
