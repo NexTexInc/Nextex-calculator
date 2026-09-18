@@ -3629,18 +3629,16 @@ function applyCushionFreightReference() {
 // ---------------------------------------------------------------
 // Bank of Canada official FX rate (mid-market reference) + bank markup
 // ---------------------------------------------------------------
-// The direct bankofcanada.ca Valet endpoint is still the correct, current,
-// unauthenticated URL for this series (confirmed against current sources) --
-// pasting it into a browser tab always "works" because that's a plain
-// navigation, not a cross-origin fetch(). The most likely reason it fails
-// specifically from inside this app is that the Bank's API may not send an
-// Access-Control-Allow-Origin header permitting a browser-side fetch() from
-// a different site -- "public/unauthenticated" and "CORS-enabled for
-// third-party JS" aren't the same thing. Rather than replace the source
-// with a non-official one, this tries the real BoC URL first, then the
-// exact same official URL again through two CORS relay services if the
-// direct call is blocked -- the published number itself stays 100% Bank of
-// Canada either way, only the delivery path changes.
+// Root cause, confirmed from a real browser console: the direct BoC call
+// was failing with an actual HTTP 400 from bankofcanada.ca itself -- not a
+// CORS block. The Valet API's own docs describe only a fixed, known set
+// of accepted query parameters and appear to reject anything outside that
+// set outright, rather than quietly ignoring it. The old "&_=<timestamp>"
+// cache-buster on that URL was exactly such an unrecognized parameter.
+// Removed it -- { cache: "no-store" } below already does the real job of
+// bypassing the browser cache. Frankfurter (European Central Bank data) is
+// kept as a fallback for genuine outages/CORS issues, clearly labeled as
+// such when used -- never silently presented as a Bank of Canada figure.
 let lastFetchedBocRate = null;
 let lastFetchedBocDate = null;
 
@@ -3657,38 +3655,49 @@ async function fetchBocRate() {
   btn.disabled = true;
   statusEl.textContent = "Fetching\u2026";
 
-  const bocUrl = "https://www.bankofcanada.ca/valet/observations/FXUSDCAD/json?recent=1&_=" + Date.now();
-  const attempts = [
-    { label: "direct", url: bocUrl },
-    { label: "backup route 1", url: "https://api.allorigins.win/raw?url=" + encodeURIComponent(bocUrl) },
-    { label: "backup route 2", url: "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(bocUrl) }
-  ];
+  // Primary: Bank of Canada direct.
+  try {
+    // No "&_=timestamp" cache-buster here -- the Valet API's docs describe
+    // only a fixed, known set of accepted parameters and appear to reject
+    // anything outside that set with 400 Bad Request, rather than quietly
+    // ignoring it like most APIs do. { cache: "no-store" } below already
+    // does the real job of bypassing the browser cache properly.
+    const bocUrl = "https://www.bankofcanada.ca/valet/observations/FXUSDCAD/json?recent=1";
+    const data = await fetchOneBocSource(bocUrl);
+    const obs = data && data.observations && data.observations[0];
+    const rate = obs && obs.FXUSDCAD && parseFloat(obs.FXUSDCAD.v);
+    const date = obs && obs.d;
+    if (!rate || !date) throw new Error("Unexpected response format");
 
-  let lastError = null;
-  for (let i = 0; i < attempts.length; i++) {
-    try {
-      const data = await fetchOneBocSource(attempts[i].url);
-      const obs = data && data.observations && data.observations[0];
-      const rate = obs && obs.FXUSDCAD && parseFloat(obs.FXUSDCAD.v);
-      const date = obs && obs.d;
-      if (!rate || !date) throw new Error("Unexpected response format");
-
-      lastFetchedBocRate = rate;
-      lastFetchedBocDate = date;
-      statusEl.innerHTML = '<b style="color:var(--navy);">BoC mid-market rate: ' + rate.toFixed(4) + '</b> as of ' + date + ' &mdash; this is a reference rate, not a retail rate. Set your markup below, then Apply.' +
-        (i > 0 ? '<br><span style="color:var(--text-secondary); font-size:10.5px;">(Delivered via ' + attempts[i].label + ' \u2014 the direct connection was blocked, but this is still the Bank\u2019s own published figure.)</span>' : '');
-      showToast("Bank of Canada rate fetched.", "success");
-      btn.disabled = false;
-      return;
-    } catch (e) {
-      lastError = e;
-      // try the next source
-    }
+    lastFetchedBocRate = rate;
+    lastFetchedBocDate = date;
+    statusEl.innerHTML = '<b style="color:var(--navy);">Bank of Canada mid-market rate: ' + rate.toFixed(4) + '</b> as of ' + date + ' &mdash; this is a reference rate, not a retail rate. Set your markup below, then Apply.';
+    showToast("Bank of Canada rate fetched.", "success");
+    btn.disabled = false;
+    return;
+  } catch (bocError) {
+    // Fall through to the alternate source below.
   }
 
-  statusEl.innerHTML = '<span style="color:var(--rust);">Could not fetch the official rate after trying the direct connection and two backup routes (last error: ' +
-    escapeHtml(lastError ? lastError.message : "unknown") + '). Your FX rate field above is unchanged \u2014 enter or check it manually at <span style="text-decoration:underline;">bankofcanada.ca/rates/exchange/daily-exchange-rates</span>.</span>';
-  showToast("Could not fetch Bank of Canada rate.", "error");
+  // Fallback: Frankfurter, serving European Central Bank data -- a
+  // genuinely different, real central-bank-published rate, not another
+  // relay of the same BoC feed.
+  try {
+    const fkUrl = "https://api.frankfurter.dev/v1/latest?from=USD&to=CAD";
+    const data = await fetchOneBocSource(fkUrl);
+    const rate = data && data.rates && parseFloat(data.rates.CAD);
+    const date = data && data.date;
+    if (!rate || !date) throw new Error("Unexpected response format");
+
+    lastFetchedBocRate = rate;
+    lastFetchedBocDate = date;
+    statusEl.innerHTML = '<b style="color:var(--navy);">ECB mid-market rate: ' + rate.toFixed(4) + '</b> as of ' + date + ' &mdash; Bank of Canada couldn\u2019t be reached, so this is the European Central Bank\u2019s published USD/CAD reference rate instead. Still a real central-bank rate, just not Canada\u2019s own. Set your markup below, then Apply.';
+    showToast("Bank of Canada was unreachable \u2014 fetched the ECB rate instead.", "success");
+  } catch (fkError) {
+    statusEl.innerHTML = '<span style="color:var(--rust);">Could not fetch a rate from Bank of Canada or the ECB backup (last error: ' +
+      escapeHtml(fkError.message) + '). Your FX rate field above is unchanged \u2014 enter or check it manually at <span style="text-decoration:underline;">bankofcanada.ca/rates/exchange/daily-exchange-rates</span>.</span>';
+    showToast("Could not fetch an official rate from either source.", "error");
+  }
   btn.disabled = false;
 }
 
