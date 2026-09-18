@@ -35,6 +35,7 @@
     --red: #B3261E;
   }
   * { box-sizing: border-box; }
+  html, body { overflow-x: hidden; max-width: 100%; }
   body {
     margin: 0;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
@@ -1121,11 +1122,11 @@
   .quote-main-line {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 10px 12px;
+    gap: 7px;
+    padding: 10px 10px;
     cursor: pointer;
   }
-  .quote-num { font-size: 11px; font-weight: 700; color: var(--text-secondary); width: 18px; flex-shrink: 0; }
+  .quote-num { font-size: 11px; font-weight: 700; color: var(--text-secondary); width: 14px; flex-shrink: 0; }
   .quote-select-checkbox { width: 17px; height: 17px; flex-shrink: 0; cursor: pointer; margin: 0; }
   .selection-toolbar { display: flex; flex-direction: column; gap: 8px; background: var(--pair-bg); border: 1.5px solid var(--terracotta); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
   .selection-toolbar .sel-count { font-size: 12.5px; font-weight: 700; color: var(--terracotta-dark); }
@@ -1173,13 +1174,15 @@
     font-size: 16px;
     cursor: pointer;
   }
-  .quote-id-block { flex: 1; min-width: 0; }
-  .quote-style { font-size: 13px; font-weight: 700; color: var(--navy); white-space: normal; overflow-wrap: break-word; }
-  .quote-vendor { font-size: 12px; color: var(--terracotta-dark); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .quote-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .quote-line { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .quote-item { font-size: 14px; font-weight: 800; color: var(--navy); }
+  .quote-price { font-size: 15px; font-weight: 800; color: var(--navy); flex-shrink: 0; white-space: nowrap; }
+  .quote-vendor-row { display: flex; align-items: center; gap: 6px; min-width: 30px; overflow: hidden; flex: 1 1 auto; }
+  .quote-vendor-row .type-badge { margin-left: 0; flex-shrink: 1; min-width: 48px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .quote-vendor { font-size: 12px; color: var(--terracotta-dark); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; min-width: 34px; }
   .type-badge { display: inline-block; background: var(--pair-bg); color: var(--terracotta-dark); font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 10px; margin-left: 6px; vertical-align: middle; }
-  .quote-headline { text-align: right; flex-shrink: 0; }
-  .quote-headline .v { font-size: 14px; font-weight: 800; color: var(--navy); display: block; }
-  .quote-headline .l { font-size: 9px; color: var(--text-secondary); }
+  .quote-size { font-size: 11px; color: var(--text-secondary); flex-shrink: 1; min-width: 36px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .quote-chevron { font-size: 11px; color: var(--terracotta-dark); flex-shrink: 0; transition: transform 0.2s ease; width: 14px; text-align: center; }
   .quote-row.open .quote-chevron { transform: rotate(90deg); }
   .quote-delete { background: none; border: none; color: var(--rust); font-size: 16px; cursor: pointer; padding: 2px 4px; flex-shrink: 0; }
@@ -2051,19 +2054,19 @@
   <!-- SAVED QUOTES SCREEN -->
   <div class="screen" id="screen-log">
     <div class="content">
-      <p class="section-label">Saved quotes
-        <span>
-          <span class="toggle" onclick="toggleSortFilter()" id="sort-filter-toggle">Sort &amp; filter &#9662;</span>
-          &nbsp;&nbsp;
-          <span class="toggle" onclick="toggleSavedView()" id="saved-view-toggle">Table view</span>
-          &nbsp;&nbsp;
-          <span class="toggle" onclick="downloadSavedQuotesSpreadsheet()">&#11015; Download Spreadsheet</span>
-          &nbsp;&nbsp;
-          <span class="toggle" onclick="exportSavedQuotesWithQR()">&#11015; Quote Sheet with QR</span>
-          &nbsp;&nbsp;
-          <span class="toggle" onclick="exportStickerSheetPDF()">&#11015; Sticker Sheet (PDF)</span>
-        </span>
-      </p>
+      <p class="section-label">Saved quotes</p>
+      <div class="field-row" style="gap:8px; margin-bottom:10px; flex-wrap:wrap;">
+        <button type="button" class="chip" onclick="toggleSortFilter()" id="sort-filter-toggle" style="flex:1 1 auto;">Sort &amp; Filter &#9662;</button>
+        <button type="button" class="chip" onclick="toggleSavedView()" id="saved-view-toggle" style="flex:1 1 auto;">Table View</button>
+        <button type="button" class="chip" onclick="toggleExportMenu()" id="export-menu-toggle" style="flex:1 1 auto;">&#11015; Export &#9662;</button>
+      </div>
+      <div class="settings-panel" id="export-menu-panel">
+        <div class="field-row" style="gap:8px; margin-bottom:8px;">
+          <button type="button" class="scan-btn" style="flex:1; white-space:normal; line-height:1.25;" onclick="downloadSavedQuotesSpreadsheet()">&#11015; Spreadsheet</button>
+          <button type="button" class="scan-btn" style="flex:1; white-space:normal; line-height:1.25;" onclick="exportSavedQuotesWithQR()">&#11015; Quote Sheet w/ QR</button>
+        </div>
+        <button type="button" class="scan-btn" style="width:100%; white-space:normal; line-height:1.25;" onclick="exportStickerSheetPDF()">&#11015; Sticker Sheet (PDF)</button>
+      </div>
       <div class="field-row" style="gap:8px; margin-bottom:10px;">
         <div class="clearable-input-wrap" style="flex:1;">
           <input type="text" id="saved-quotes-search" placeholder="Search by item # or supplier..." oninput="toggleClearBtn(this); renderLog();">
@@ -2074,8 +2077,8 @@
       <input type="file" id="saved-quote-scan-input" accept="image/*" capture="environment" style="display:none;" onchange="handleSavedQuoteScan(event)">
       <div class="field-hint" id="saved-quote-scan-status" style="margin-top:-4px; margin-bottom:8px;"></div>
       <div class="field-row" style="gap:8px; margin-bottom:10px;">
-        <button type="button" class="scan-btn" style="flex:1;" onclick="downloadSupplierQuoteTemplate()">Download Factory Template</button>
-        <button type="button" class="scan-btn" style="flex:1;" onclick="triggerSupplierQuoteBulkUpload()">Bulk Upload Quotes</button>
+        <button type="button" class="scan-btn" style="flex:1; white-space:normal; line-height:1.25;" onclick="downloadSupplierQuoteTemplate()">Download Factory Template</button>
+        <button type="button" class="scan-btn" style="flex:1; white-space:normal; line-height:1.25;" onclick="triggerSupplierQuoteBulkUpload()">Bulk Upload Quotes</button>
       </div>
       <input type="file" id="supplier-quote-bulk-input" accept=".xlsx,.xls" style="display:none;" onchange="handleSupplierQuoteBulkUpload(event)">
       <div class="settings-panel" id="sort-filter-panel">
@@ -8822,7 +8825,26 @@ function toggleSortFilter() {
   const panel = document.getElementById("sort-filter-panel");
   const label = document.getElementById("sort-filter-toggle");
   const open = panel.classList.toggle("open");
-  label.innerHTML = "Sort &amp; filter " + (open ? "&#9652;" : "&#9662;");
+  label.innerHTML = "Sort &amp; Filter " + (open ? "&#9652;" : "&#9662;");
+  if (open) closeExportMenu();
+}
+
+function toggleExportMenu() {
+  const panel = document.getElementById("export-menu-panel");
+  const label = document.getElementById("export-menu-toggle");
+  const open = panel.classList.toggle("open");
+  label.innerHTML = "&#11015; Export " + (open ? "&#9652;" : "&#9662;");
+  if (open) closeSortFilterPanel();
+}
+
+function closeExportMenu() {
+  document.getElementById("export-menu-panel").classList.remove("open");
+  document.getElementById("export-menu-toggle").innerHTML = "&#11015; Export &#9662;";
+}
+
+function closeSortFilterPanel() {
+  document.getElementById("sort-filter-panel").classList.remove("open");
+  document.getElementById("sort-filter-toggle").innerHTML = "Sort &amp; Filter &#9662;";
 }
 
 function refreshAllSavedViews() {
@@ -10277,6 +10299,26 @@ function buildQuoteDetailHtml(entry, activeMeeting) {
   return detailHtml;
 }
 
+// Shared 2-line grid for a saved-quote row: item # + price on one baseline,
+// vendor (+ category badge) + size/basis label on the next -- keeps the two
+// sides aligned regardless of badge length, instead of the badge forcing a
+// wrap that pushed everything else out of alignment.
+function buildQuoteRowGrid(itemLabel, priceText, vendorText, typeBadgeText, sizeLabelText) {
+  return '<div class="quote-body">' +
+      '<div class="quote-line">' +
+        '<span class="quote-item">' + itemLabel + '</span>' +
+        '<span class="quote-price">' + priceText + '</span>' +
+      '</div>' +
+      '<div class="quote-line">' +
+        '<div class="quote-vendor-row">' +
+          '<span class="quote-vendor">' + vendorText + '</span>' +
+          (typeBadgeText ? '<span class="type-badge">' + typeBadgeText + '</span>' : '') +
+        '</div>' +
+        '<span class="quote-size">' + (sizeLabelText || "") + '</span>' +
+      '</div>' +
+    '</div>';
+}
+
 async function renderLog() {
   renderVendorFilterChip();
   const container = document.getElementById("log-list");
@@ -10315,13 +10357,16 @@ async function renderLog() {
     const cushionPrice = (entry.category === "cushions") ? computeCushionPriceForEntry(entry, getSettings()) : null;
     const detailHtml = buildQuoteDetailHtml(entry, activeMeetingForRow);
     const typeBadgeText = entry.category === "cushions" ? "Cushion" : (entry.curtainType || "");
-    let headlineHtml;
+    let priceText, sizeLabelText;
     if (headline) {
-      headlineHtml = '<span class="v">' + fmt(headline.usd) + '</span><span class="l">Factory Cost &middot; ' + headline.label + '</span>';
+      priceText = fmt(headline.usd);
+      sizeLabelText = headline.label;
     } else if (cushionPrice) {
-      headlineHtml = '<span class="v">' + fmt(cushionPrice.usd) + '</span><span class="l">Shell &middot; ' + (CUSHION_SIZE_LABELS[entry.cushionSize] || entry.cushionSize || "") + '</span>';
+      priceText = fmt(cushionPrice.usd);
+      sizeLabelText = "Shell \u00b7 " + (CUSHION_SIZE_LABELS[entry.cushionSize] || entry.cushionSize || "");
     } else {
-      headlineHtml = '<span class="v" style="font-size:12px;">No pricing yet</span>';
+      priceText = "No pricing yet";
+      sizeLabelText = "";
     }
 
     const thumbHtml = entry.photo
@@ -10333,12 +10378,8 @@ async function renderLog() {
         '<input type="checkbox" class="quote-select-checkbox" data-id="' + attrSafe(entry.id) + '" ' + (selectedQuoteIds.has(entry.id) ? "checked" : "") + ' onclick="event.stopPropagation();" onchange="toggleQuoteSelection(\'' + entry.id + '\', this.checked)">' +
         '<span class="quote-num">' + (idx + 1) + '</span>' +
         thumbHtml +
+        buildQuoteRowGrid(escapeHtml(entry.item || "(no item #)"), priceText, escapeHtml(entry.vendor), escapeHtml(typeBadgeText), escapeHtml(sizeLabelText)) +
         '<span class="quote-chevron">&#9656;</span>' +
-        '<div class="quote-id-block">' +
-          '<div class="quote-style">' + escapeHtml(entry.item || "(no item #)") + (typeBadgeText ? '<span class="type-badge">' + escapeHtml(typeBadgeText) + '</span>' : '') + '</div>' +
-          '<div class="quote-vendor">' + escapeHtml(entry.vendor) + '</div>' +
-        '</div>' +
-        '<div class="quote-headline">' + headlineHtml + '</div>' +
         '<button class="quote-delete" onclick="event.stopPropagation(); deleteQuote(\'' + entry.id + '\')">&#128465;</button>' +
       '</div>' +
       '<div class="quote-detail">' + detailHtml + '</div>';
@@ -10364,13 +10405,16 @@ function buildExpandableQuoteRow(entry, idx, rowId) {
   const headline = (entry.prices && entry.prices[0]) ? entry.prices[0] : null;
   const cushionPrice = (!headline && entry.category === "cushions") ? computeCushionPriceForEntry(entry, getSettings()) : null;
   const typeBadgeText = entry.category === "cushions" ? "Cushion" : (entry.curtainType || "");
-  let headlineHtml;
+  let priceText, sizeLabelText;
   if (headline) {
-    headlineHtml = '<span class="v">' + fmt(headline.usd) + '</span><span class="l">Factory Cost &middot; ' + headline.label + '</span>';
+    priceText = fmt(headline.usd);
+    sizeLabelText = headline.label;
   } else if (cushionPrice) {
-    headlineHtml = '<span class="v">' + fmt(cushionPrice.usd) + '</span><span class="l">Shell &middot; ' + (CUSHION_SIZE_LABELS[entry.cushionSize] || entry.cushionSize || "") + '</span>';
+    priceText = fmt(cushionPrice.usd);
+    sizeLabelText = "Shell \u00b7 " + (CUSHION_SIZE_LABELS[entry.cushionSize] || entry.cushionSize || "");
   } else {
-    headlineHtml = '<span class="v" style="font-size:12px;">No pricing yet</span>';
+    priceText = "No pricing yet";
+    sizeLabelText = "";
   }
   const thumbHtml = entry.photo
     ? '<img class="quote-thumb" src="' + entry.photo + '" alt="" style="cursor:pointer;" onclick="event.stopPropagation(); openLightbox(\'' + entry.photo + '\', event)">'
@@ -10380,12 +10424,8 @@ function buildExpandableQuoteRow(entry, idx, rowId) {
     '<div class="quote-main-line" onclick="document.getElementById(\'' + rowId + '\').classList.toggle(\'open\')">' +
       '<span class="quote-num">' + (idx + 1) + '</span>' +
       thumbHtml +
+      buildQuoteRowGrid(escapeHtml(entry.item || "(no item #)"), priceText, escapeHtml(entry.vendor), escapeHtml(typeBadgeText), escapeHtml(sizeLabelText)) +
       '<span class="quote-chevron">&#9656;</span>' +
-      '<div class="quote-id-block">' +
-        '<div class="quote-style">' + escapeHtml(entry.item || "(no item #)") + (typeBadgeText ? '<span class="type-badge">' + escapeHtml(typeBadgeText) + '</span>' : '') + '</div>' +
-        '<div class="quote-vendor">' + escapeHtml(entry.vendor) + '</div>' +
-      '</div>' +
-      '<div class="quote-headline">' + headlineHtml + '</div>' +
     '</div>' +
     '<div class="quote-detail">' + detailHtml + '</div>' +
   '</div>';
