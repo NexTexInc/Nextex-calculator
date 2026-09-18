@@ -571,6 +571,15 @@
     color: var(--text-primary);
     font-family: inherit;
   }
+  #saved-quotes-search {
+    padding: 12px 34px 12px 12px;
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    font-size: 15px;
+    background: var(--card);
+    color: var(--text-primary);
+    font-family: inherit;
+  }
   .field input:focus, .field select:focus { outline: none; border-color: var(--terracotta); }
   .field-row { display: flex; gap: 10px; }
   .field-row .field { flex: 1; }
@@ -1393,6 +1402,11 @@
       <button type="button" class="hamburger-submenu-item" onclick="exportItemMaster()">Export Item Master</button>
       <button type="button" class="hamburger-submenu-item" onclick="openDeletedItemsScreen()">Deleted Items</button>
     </div>
+
+    <button type="button" class="hamburger-menu-item" onclick="openRunListScreen()">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><path d="M3 14h7v7H3z"></path><path d="M14 17h7"></path><path d="M14 20h7"></path></svg>
+      <span style="flex:1;">Run List</span>
+    </button>
 
     <button type="button" class="hamburger-menu-item" onclick="runStorageDiagnostics()">
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16"></path><path d="M8 20V10"></path><path d="M13 20V4"></path><path d="M18 20v-7"></path></svg>
@@ -2782,6 +2796,61 @@
       </div>
       <div class="field-hint" style="margin-bottom:10px;">Items removed from the Database. Restore any of these if they were removed by mistake.</div>
       <div id="deleted-items-list"></div>
+    </div>
+  </div>
+
+  <div class="screen" id="screen-runlist">
+    <div class="content">
+      <div class="cq-back-header">
+        <button type="button" class="cq-back-btn" onclick="closeRunListScreen()">&#8592; Back</button>
+        <span class="section-label" style="margin:0;">Run List</span>
+      </div>
+      <div class="field-hint" style="margin-bottom:10px;">Scan fabric hanger QR codes to build a working list, drawn from your saved quotes. Nothing here is a new quote -- it's a live, disposable subset you can review, filter, export, or send to a Meeting, Sourcing session, or Customer Quote.</div>
+
+      <button type="button" class="btn btn-save" style="width:100%; padding:16px; font-size:16px; margin-bottom:8px;" onclick="triggerRunListScan()">&#128247; Scan Next Item</button>
+      <input type="file" id="runlist-scan-input" accept="image/*" capture="environment" style="display:none;" onchange="handleRunListScan(event)">
+      <div class="field-hint" id="runlist-scan-status" style="margin-top:-2px; margin-bottom:10px; text-align:center;"></div>
+
+      <div class="field-row" style="gap:8px; margin-bottom:10px; flex-wrap:wrap;">
+        <button type="button" class="chip" onclick="toggleRunListSortPanel()" id="runlist-sort-toggle" style="flex:1 1 auto;">Sort &#9662;</button>
+        <button type="button" class="chip" onclick="toggleRunListExportMenu()" id="runlist-export-menu-toggle" style="flex:1 1 auto;">&#11015; Export &#9662;</button>
+      </div>
+      <div class="settings-panel" id="runlist-sort-panel">
+        <div class="settings-sub">Sort by</div>
+        <div class="chip-group" id="runlist-sort-chip-group">
+          <button type="button" class="chip selected" onclick="setRunListSort('scan')" data-sort="scan">Scan order</button>
+          <button type="button" class="chip" onclick="setRunListSort('item')" data-sort="item">Item #</button>
+          <button type="button" class="chip" onclick="setRunListSort('vendor')" data-sort="vendor">Supplier</button>
+          <button type="button" class="chip" onclick="setRunListSort('price_asc')" data-sort="price_asc">Price: Low to High</button>
+          <button type="button" class="chip" onclick="setRunListSort('price_desc')" data-sort="price_desc">Price: High to Low</button>
+        </div>
+      </div>
+      <div class="settings-panel" id="runlist-export-menu-panel">
+        <div class="field-row" style="gap:8px; margin-bottom:8px;">
+          <button type="button" class="scan-btn" style="flex:1; white-space:normal; line-height:1.25;" onclick="downloadRunListSpreadsheet()">&#11015; Spreadsheet</button>
+          <button type="button" class="scan-btn" style="flex:1; white-space:normal; line-height:1.25;" onclick="exportRunListWithQR()">&#11015; Quote Sheet w/ QR</button>
+        </div>
+        <button type="button" class="scan-btn" style="width:100%; white-space:normal; line-height:1.25;" onclick="exportRunListStickerSheet()">&#11015; Sticker Sheet (PDF)</button>
+      </div>
+
+      <div id="runlist-selection-toolbar" style="display:none;"></div>
+
+      <p class="section-label">Scanned so far (<span id="runlist-count">0</span>)</p>
+      <div id="runlist-list"></div>
+
+      <div class="field-row" style="gap:8px; margin-top:14px;">
+        <button type="button" class="scan-btn" style="flex:1;" onclick="clearRunList()">Clear List</button>
+        <button type="button" class="scan-btn" style="flex:1;" onclick="promptSaveRunListAs()">Save As New List</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="save-runlist-banner" class="confirm-banner">
+    <div class="confirm-message">Name this list</div>
+    <input type="text" id="save-runlist-name-input" placeholder="e.g. ABC Textiles Meeting Sept 17" style="width:100%; margin-bottom:10px;">
+    <div class="confirm-actions">
+      <button class="btn btn-clear-all" style="flex:none; padding:8px 18px;" onclick="confirmSaveRunListAs()">Save</button>
+      <button class="btn" style="flex:none; padding:8px 18px; background:var(--border); color:var(--text-primary);" onclick="document.getElementById('save-runlist-banner').classList.remove('show')">Cancel</button>
     </div>
   </div>
 
@@ -5715,7 +5784,7 @@ async function exportItemMaster() {
   showToast("Downloading Item Master\u2026", "success");
 }
 
-async function exportSavedQuotesWithQR() {
+async function exportSavedQuotesWithQR(overrideList, filenameOverride) {
   try {
     await ensureExcelJSLibLoaded();
     await ensureQRCodeLibLoaded();
@@ -5724,8 +5793,13 @@ async function exportSavedQuotesWithQR() {
     return;
   }
 
-  let quotes = await getQuotes();
-  quotes = getExportQuoteList(quotes);
+  let quotes;
+  if (overrideList) {
+    quotes = overrideList;
+  } else {
+    quotes = await getQuotes();
+    quotes = getExportQuoteList(quotes);
+  }
   if (quotes.length === 0) {
     showToast(selectedQuoteIds.size > 0 ? "No selected quotes to export." : (savedVendorFilter ? "No saved quotes for this supplier filter." : "No saved quotes yet."), "error");
     return;
@@ -5830,7 +5904,7 @@ async function exportSavedQuotesWithQR() {
   const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
-  const filenameBase = selectedQuoteIds.size > 0 ? "Selected" : (savedVendorFilter ? savedVendorFilter.replace(/[^a-z0-9\-_ ]/gi, "").trim().replace(/\s+/g, "_") : "All");
+  const filenameBase = filenameOverride || (selectedQuoteIds.size > 0 ? "Selected" : (savedVendorFilter ? savedVendorFilter.replace(/[^a-z0-9\-_ ]/gi, "").trim().replace(/\s+/g, "_") : "All"));
   link.href = url;
   link.download = "NexTex_" + filenameBase + "_Quote_Sheet_" + new Date().toISOString().slice(0, 10) + ".xlsx";
   document.body.appendChild(link);
@@ -5866,7 +5940,7 @@ function dataUrlToUint8Array(dataUrl) {
   return bytes;
 }
 
-async function exportStickerSheetPDF() {
+async function exportStickerSheetPDF(overrideList, filenameOverride) {
   try {
     await ensurePDFLibLoaded();
     await ensureQRCodeLibLoaded();
@@ -5875,8 +5949,13 @@ async function exportStickerSheetPDF() {
     return;
   }
 
-  let quotes = await getQuotes();
-  quotes = getExportQuoteList(quotes).filter(function(q) { return q.item; });
+  let quotes;
+  if (overrideList) {
+    quotes = overrideList.filter(function(q) { return q.item; });
+  } else {
+    quotes = await getQuotes();
+    quotes = getExportQuoteList(quotes).filter(function(q) { return q.item; });
+  }
   if (quotes.length === 0) {
     showToast(selectedQuoteIds.size > 0 ? "No selected quotes with an item # to export." : (savedVendorFilter ? "No saved quotes with an item # for this supplier filter." : "No saved quotes with an item # yet."), "error");
     return;
@@ -5953,7 +6032,7 @@ async function exportStickerSheetPDF() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  const filenameBase = selectedQuoteIds.size > 0 ? "Selected" : (savedVendorFilter ? savedVendorFilter.replace(/[^a-z0-9\-_ ]/gi, "").trim().replace(/\s+/g, "_") : "All");
+  const filenameBase = filenameOverride || (selectedQuoteIds.size > 0 ? "Selected" : (savedVendorFilter ? savedVendorFilter.replace(/[^a-z0-9\-_ ]/gi, "").trim().replace(/\s+/g, "_") : "All"));
   link.download = "NexTex_" + filenameBase + "_Sticker_Sheet_" + new Date().toISOString().slice(0, 10) + ".pdf";
   document.body.appendChild(link);
   link.click();
@@ -9011,6 +9090,389 @@ function closeDeletedItemsScreen() {
   showScreen(screenBeforeDeletedItems);
 }
 
+// ---------------------------------------------------------------
+// Run List: a live, disposable working list assembled by scanning
+// fabric-hanger QR codes against existing Saved Quotes. Not a new
+// quote store -- just id references into getQuotes(), resolved fresh
+// on every render so it always reflects the real, current data.
+// ---------------------------------------------------------------
+async function getRunList() {
+  const raw = await storageGet("nextex_runlist");
+  try { return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
+}
+async function saveRunListItems(list) {
+  return await storageSet("nextex_runlist", JSON.stringify(list));
+}
+
+let runListSelectedIds = new Set();
+let runListSortBy = "scan";
+let screenBeforeRunList = "calc";
+
+function openRunListScreen() {
+  document.getElementById("hamburger-drawer").classList.remove("show");
+  document.getElementById("hamburger-backdrop").classList.remove("show");
+  const activeScreen = document.querySelector(".screen.active");
+  if (activeScreen) screenBeforeRunList = activeScreen.id.replace("screen-", "");
+  document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
+  document.getElementById("screen-runlist").classList.add("active");
+  document.getElementById("tabbar").style.display = "none";
+  renderRunList();
+}
+
+function closeRunListScreen() {
+  document.getElementById("tabbar").style.display = "flex";
+  showScreen(screenBeforeRunList);
+}
+
+function triggerRunListScan() {
+  document.getElementById("runlist-scan-input").click();
+}
+
+async function handleRunListScan(event) {
+  const file = event.target.files && event.target.files[0];
+  event.target.value = "";
+  if (!file) return;
+  const statusEl = document.getElementById("runlist-scan-status");
+  statusEl.textContent = "Loading QR scanner\u2026";
+
+  try {
+    const result = await decodeQRFromPhotoFile(file, function(msg) { statusEl.textContent = msg; });
+    if (!result || !result.data) {
+      statusEl.textContent = "No QR code found. Try again with the code centered and in focus.";
+      showToast("No QR code found in that photo.", "error");
+      return;
+    }
+    const scannedItem = result.data.trim();
+    const quotes = await getQuotes();
+    // Drawn directly from Saved Quotes -- a scan that doesn't match anything
+    // there has nothing to pull in, so it's flagged rather than invented.
+    const match = quotes.find(function(q) { return (q.item || "").toLowerCase() === scannedItem.toLowerCase(); });
+
+    if (!match) {
+      statusEl.textContent = "";
+      alert("\u201c" + scannedItem + "\u201d is not part of the saved quotes database.");
+      return;
+    }
+
+    const runList = await getRunList();
+    if (runList.some(function(r) { return r.id === match.id; })) {
+      statusEl.textContent = "Already in this list: " + match.item;
+      showToast("\u201c" + match.item + "\u201d is already in this list.", "error");
+      return;
+    }
+
+    runList.push({ id: match.id, scannedAt: new Date().toISOString() });
+    await saveRunListItems(runList);
+    statusEl.textContent = "Added: " + match.item;
+    showToast("Added \u201c" + match.item + "\u201d.", "success");
+    renderRunList();
+  } catch (e) {
+    statusEl.textContent = "Scan failed \u2014 try again.";
+    showToast("Could not scan the QR code. Check your connection and try again.", "error");
+  }
+}
+
+function toggleRunListSortPanel() {
+  const panel = document.getElementById("runlist-sort-panel");
+  const label = document.getElementById("runlist-sort-toggle");
+  const open = panel.classList.toggle("open");
+  label.innerHTML = "Sort " + (open ? "&#9652;" : "&#9662;");
+  if (open) closeRunListExportMenu();
+}
+
+function toggleRunListExportMenu() {
+  const panel = document.getElementById("runlist-export-menu-panel");
+  const label = document.getElementById("runlist-export-menu-toggle");
+  const open = panel.classList.toggle("open");
+  label.innerHTML = "&#11015; Export " + (open ? "&#9652;" : "&#9662;");
+  if (open) closeRunListSortPanel();
+}
+
+function closeRunListExportMenu() {
+  document.getElementById("runlist-export-menu-panel").classList.remove("open");
+  document.getElementById("runlist-export-menu-toggle").innerHTML = "&#11015; Export &#9662;";
+}
+function closeRunListSortPanel() {
+  document.getElementById("runlist-sort-panel").classList.remove("open");
+  document.getElementById("runlist-sort-toggle").innerHTML = "Sort &#9662;";
+}
+
+function setRunListSort(type) {
+  runListSortBy = type;
+  document.querySelectorAll("#runlist-sort-chip-group .chip").forEach(function(btn) {
+    btn.classList.toggle("selected", btn.getAttribute("data-sort") === type);
+  });
+  renderRunList();
+}
+
+function runListPriceValue(entry, settings) {
+  const headline = (entry.prices && entry.prices[0]) ? entry.prices[0] : null;
+  if (headline) return headline.usd;
+  if (entry.category === "cushions") {
+    const cp = computeCushionPriceForEntry(entry, settings);
+    if (cp) return cp.usd;
+  }
+  return null;
+}
+
+function applyRunListSort(entries, settings) {
+  const sorted = entries.slice();
+  if (runListSortBy === "item") {
+    sorted.sort(function(a, b) { return (a.item || "").localeCompare(b.item || ""); });
+  } else if (runListSortBy === "vendor") {
+    sorted.sort(function(a, b) { return (a.vendor || "").localeCompare(b.vendor || ""); });
+  } else if (runListSortBy === "price_asc") {
+    sorted.sort(function(a, b) {
+      const av = runListPriceValue(a, settings), bv = runListPriceValue(b, settings);
+      return (av === null ? Infinity : av) - (bv === null ? Infinity : bv);
+    });
+  } else if (runListSortBy === "price_desc") {
+    sorted.sort(function(a, b) {
+      const av = runListPriceValue(a, settings), bv = runListPriceValue(b, settings);
+      return (bv === null ? -Infinity : bv) - (av === null ? -Infinity : av);
+    });
+  }
+  // "scan" -- leave as scanned order (the array is already in that order).
+  return sorted;
+}
+
+async function renderRunList() {
+  const runList = await getRunList();
+  const quotes = await getQuotes();
+  const quotesById = {};
+  quotes.forEach(function(q) { quotesById[q.id] = q; });
+
+  let resolvedEntries = runList
+    .map(function(r) { return quotesById[r.id] || null; })
+    .filter(function(e) { return e !== null; });
+
+  // If a scanned quote was since deleted from Saved Quotes, drop its
+  // stale reference here too rather than showing a broken row.
+  if (resolvedEntries.length !== runList.length) {
+    const stillValidIds = new Set(resolvedEntries.map(function(e) { return e.id; }));
+    await saveRunListItems(runList.filter(function(r) { return stillValidIds.has(r.id); }));
+  }
+
+  document.getElementById("runlist-count").textContent = resolvedEntries.length;
+
+  const liveIds = new Set(resolvedEntries.map(function(e) { return e.id; }));
+  runListSelectedIds.forEach(function(id) { if (!liveIds.has(id)) runListSelectedIds.delete(id); });
+  renderRunListSelectionToolbar();
+
+  const container = document.getElementById("runlist-list");
+  if (resolvedEntries.length === 0) {
+    container.innerHTML = '<div class="log-empty"><div class="icon">&#128247;</div>Scan a fabric hanger\u2019s QR code to add it here.</div>';
+    return;
+  }
+
+  const settings = getSettings();
+  const sorted = applyRunListSort(resolvedEntries, settings);
+
+  const listEl = document.createElement("div");
+  listEl.className = "quote-list";
+
+  sorted.forEach(function(entry, idx) {
+    const headline = (entry.prices && entry.prices[0]) ? entry.prices[0] : null;
+    const cushionPrice = (entry.category === "cushions") ? computeCushionPriceForEntry(entry, settings) : null;
+    const typeBadgeText = entry.category === "cushions" ? "Cushion" : (entry.curtainType || "");
+    let priceText, sizeLabelText;
+    if (headline) {
+      priceText = fmt(headline.usd);
+      sizeLabelText = headline.label;
+    } else if (cushionPrice) {
+      priceText = fmt(cushionPrice.usd);
+      sizeLabelText = "Shell \u00b7 " + (CUSHION_SIZE_LABELS[entry.cushionSize] || entry.cushionSize || "");
+    } else {
+      priceText = "No pricing yet";
+      sizeLabelText = "";
+    }
+
+    const thumbHtml = entry.photo
+      ? '<img class="quote-thumb" src="' + entry.photo + '" alt="" style="cursor:pointer;" onclick="event.stopPropagation(); openLightbox(\'' + entry.photo + '\', event)">'
+      : '<span class="quote-thumb quote-thumb-empty">&#128247;</span>';
+
+    const rowId = "runlist_row_" + entry.id;
+    const detailHtml = buildQuoteDetailHtml(entry, null);
+
+    const row = document.createElement("div");
+    row.className = "quote-row";
+    row.id = rowId;
+    row.innerHTML =
+      '<div class="quote-main-line" onclick="document.getElementById(\'' + rowId + '\').classList.toggle(\'open\')">' +
+        '<input type="checkbox" class="quote-select-checkbox" data-id="' + attrSafe(entry.id) + '" ' + (runListSelectedIds.has(entry.id) ? "checked" : "") + ' onclick="event.stopPropagation();" onchange="toggleRunListSelection(\'' + entry.id + '\', this.checked)">' +
+        '<span class="quote-num">' + (idx + 1) + '</span>' +
+        thumbHtml +
+        buildQuoteRowGrid(escapeHtml(entry.item || "(no item #)"), priceText, escapeHtml(entry.vendor), escapeHtml(typeBadgeText), escapeHtml(sizeLabelText)) +
+        '<span class="quote-chevron">&#9656;</span>' +
+        '<button class="quote-delete" title="Remove from this list" onclick="event.stopPropagation(); removeFromRunList(\'' + entry.id + '\')">&#128465;</button>' +
+      '</div>' +
+      '<div class="quote-detail">' + detailHtml + '</div>';
+
+    listEl.appendChild(row);
+  });
+
+  container.innerHTML = "";
+  container.appendChild(listEl);
+}
+
+function toggleRunListSelection(id, checked) {
+  if (checked) runListSelectedIds.add(id); else runListSelectedIds.delete(id);
+  renderRunListSelectionToolbar();
+}
+
+function clearRunListSelection() {
+  runListSelectedIds.clear();
+  document.querySelectorAll("#runlist-list .quote-select-checkbox").forEach(function(cb) { cb.checked = false; });
+  renderRunListSelectionToolbar();
+}
+
+function renderRunListSelectionToolbar() {
+  const el = document.getElementById("runlist-selection-toolbar");
+  if (!el) return;
+  const n = runListSelectedIds.size;
+  if (n === 0) {
+    el.style.display = "none";
+    el.innerHTML = "";
+    return;
+  }
+  el.style.display = "";
+  el.innerHTML =
+    '<div class="selection-toolbar">' +
+      '<span class="sel-count">' + n + ' selected \u2014 downloads and Add to Customer Quote below will use just these</span>' +
+      '<div class="sel-actions">' +
+        '<button type="button" class="chip" onclick="addSelectedRunListToCustomerQuote()">Add to Customer Quote</button>' +
+        '<button type="button" class="chip" onclick="removeSelectedFromRunList()">Remove from List</button>' +
+        '<button type="button" class="chip" onclick="clearRunListSelection()">Clear Selection</button>' +
+      '</div>' +
+    '</div>';
+}
+
+// Reuses the Saved Quotes cart/meeting/sourcing flow verbatim by briefly
+// lending it this screen's selection -- same well-tested logic (including
+// the once-per-batch meeting/sourcing tag prompt), no separate copy of it.
+async function addSelectedRunListToCustomerQuote() {
+  if (runListSelectedIds.size === 0) {
+    showToast("No items selected.", "error");
+    return;
+  }
+  const savedSelection = selectedQuoteIds;
+  selectedQuoteIds = new Set(runListSelectedIds);
+  await bulkAddSelectedQuotesToCustomerQuote();
+  selectedQuoteIds = savedSelection;
+  runListSelectedIds.clear();
+  renderRunListSelectionToolbar();
+  renderRunList();
+}
+
+async function removeSelectedFromRunList() {
+  if (runListSelectedIds.size === 0) return;
+  const n = runListSelectedIds.size;
+  showConfirm(
+    "Remove " + n + " item" + (n === 1 ? "" : "s") + " from this list? (They stay in Saved Quotes \u2014 this only removes them from this working list.)",
+    async function() {
+      let runList = await getRunList();
+      runList = runList.filter(function(r) { return !runListSelectedIds.has(r.id); });
+      await saveRunListItems(runList);
+      runListSelectedIds.clear();
+      renderRunListSelectionToolbar();
+      renderRunList();
+      showToast(n + " item" + (n === 1 ? "" : "s") + " removed from this list.", "success");
+    }
+  );
+}
+
+async function removeFromRunList(id) {
+  let runList = await getRunList();
+  runList = runList.filter(function(r) { return r.id !== id; });
+  await saveRunListItems(runList);
+  runListSelectedIds.delete(id);
+  renderRunListSelectionToolbar();
+  renderRunList();
+}
+
+function clearRunList() {
+  showConfirm("Clear the entire run list? This only clears this working list \u2014 your saved quotes are untouched.", async function() {
+    await saveRunListItems([]);
+    runListSelectedIds.clear();
+    renderRunListSelectionToolbar();
+    renderRunList();
+    showToast("Run list cleared.", "success");
+  });
+}
+
+async function promptSaveRunListAs() {
+  const runList = await getRunList();
+  if (runList.length === 0) {
+    showToast("Nothing scanned yet.", "error");
+    return;
+  }
+  document.getElementById("save-runlist-name-input").value = "";
+  document.getElementById("save-runlist-banner").classList.add("show");
+}
+
+async function confirmSaveRunListAs() {
+  const name = document.getElementById("save-runlist-name-input").value.trim();
+  if (!name) {
+    showToast("Enter a name for this list.", "error");
+    return;
+  }
+  const runList = await getRunList();
+  const raw = await storageGet("nextex_named_runlists");
+  let namedLists = [];
+  try { namedLists = raw ? JSON.parse(raw) : []; } catch (e) { namedLists = []; }
+  namedLists.push({ name: name, itemIds: runList.map(function(r) { return r.id; }), savedAt: new Date().toISOString() });
+  await storageSet("nextex_named_runlists", JSON.stringify(namedLists));
+
+  document.getElementById("save-runlist-banner").classList.remove("show");
+  await saveRunListItems([]);
+  runListSelectedIds.clear();
+  renderRunListSelectionToolbar();
+  renderRunList();
+  showToast("Saved as \u201c" + name + "\u201d. Starting a fresh list.", "success");
+}
+
+// Export menu: reuses the exact Saved Quotes export builders with an
+// explicit list override, so formatting (currency, auto-fit columns,
+// centering, the logo banner, cushion all-sizes prompt) stays identical.
+async function getResolvedRunListEntries() {
+  const runList = await getRunList();
+  const quotes = await getQuotes();
+  const quotesById = {};
+  quotes.forEach(function(q) { quotesById[q.id] = q; });
+  let entries = runList.map(function(r) { return quotesById[r.id]; }).filter(Boolean);
+  if (runListSelectedIds.size > 0) {
+    entries = entries.filter(function(e) { return runListSelectedIds.has(e.id); });
+  }
+  return applyRunListSort(entries, getSettings());
+}
+
+async function downloadRunListSpreadsheet() {
+  const entries = await getResolvedRunListEntries();
+  if (entries.length === 0) {
+    showToast(runListSelectedIds.size > 0 ? "No selected items to download." : "Nothing scanned yet.", "error");
+    return;
+  }
+  await downloadSavedQuotesSpreadsheet(entries, runListSelectedIds.size > 0 ? "RunList_Selected" : "RunList");
+}
+
+async function exportRunListWithQR() {
+  const entries = await getResolvedRunListEntries();
+  if (entries.length === 0) {
+    showToast(runListSelectedIds.size > 0 ? "No selected items to export." : "Nothing scanned yet.", "error");
+    return;
+  }
+  await exportSavedQuotesWithQR(entries, runListSelectedIds.size > 0 ? "RunList_Selected" : "RunList");
+}
+
+async function exportRunListStickerSheet() {
+  const entries = await getResolvedRunListEntries();
+  if (entries.length === 0) {
+    showToast(runListSelectedIds.size > 0 ? "No selected items with an item # to export." : "Nothing scanned yet.", "error");
+    return;
+  }
+  await exportStickerSheetPDF(entries, runListSelectedIds.size > 0 ? "RunList_Selected" : "RunList");
+}
+
 async function renderDeletedItemsScreen() {
   const deletedList = await getDeletedItems();
   const container = document.getElementById("deleted-items-list");
@@ -9721,10 +10183,14 @@ function resolveCushionSizeModeChoice(mode) {
   if (cb) cb(mode);
 }
 
-async function downloadSavedQuotesSpreadsheet() {
-  let list = await getQuotes();
-
-  const filtered = getExportQuoteList(list);
+async function downloadSavedQuotesSpreadsheet(overrideList, filenameOverride) {
+  let filtered;
+  if (overrideList) {
+    filtered = overrideList;
+  } else {
+    const list = await getQuotes();
+    filtered = getExportQuoteList(list);
+  }
   if (filtered.length === 0) {
     showToast(selectedQuoteIds.size > 0 ? "No selected quotes to download." : "No saved quotes to download.", "error");
     return;
@@ -9803,7 +10269,7 @@ async function downloadSavedQuotesSpreadsheet() {
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const url = URL.createObjectURL(blob);
-    const filenameBase = selectedQuoteIds.size > 0 ? "Selected_Quotes" : (savedVendorFilter ? savedVendorFilter + "_Quotes" : "All_Quotes");
+    const filenameBase = filenameOverride || (selectedQuoteIds.size > 0 ? "Selected_Quotes" : (savedVendorFilter ? savedVendorFilter + "_Quotes" : "All_Quotes"));
     const link = document.createElement("a");
     link.href = url;
     link.download = "NexTex_" + filenameBase.replace(/[^a-z0-9\-_ ]/gi, "").trim().replace(/\s+/g, "_") + "_" + new Date().toISOString().slice(0, 10) + ".xlsx";
