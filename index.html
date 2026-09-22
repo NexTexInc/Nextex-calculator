@@ -1371,6 +1371,24 @@
     border-radius: 20px;
   }
   .filter-chip button { background: none; border: none; color: var(--terracotta-dark); font-size: 13px; cursor: pointer; padding: 0; line-height: 1; }
+
+  /* ---- Mockup screen ---- */
+  .mockup-result-frame {
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    background-color: #fff;
+    background-image:
+      linear-gradient(45deg, #ececec 25%, transparent 25%),
+      linear-gradient(-45deg, #ececec 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #ececec 75%),
+      linear-gradient(-45deg, transparent 75%, #ececec 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  }
+  .mockup-result-frame img { display: block; width: 100%; height: auto; }
+  .mockup-status { min-height: 18px; text-align: center; margin: -8px 0 12px; }
+  .mockup-status.error { color: var(--red); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -1469,6 +1487,14 @@
       <button type="button" class="hamburger-submenu-item" onclick="openSavedRunListsScreen()">Saved Lists &#8594;</button>
     </div>
 
+    <button type="button" class="hamburger-menu-item" onclick="openMockupScreen()">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5 9-5z"></path><path d="M3 13l9 5 9-5"></path></svg>
+      <span style="flex:1;">Mockup</span>
+    </button>
+    <button type="button" class="hamburger-menu-item" onclick="openTestPhotoScreen()">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+      <span style="flex:1;">Test Photo Storage</span>
+    </button>
     <button type="button" class="hamburger-menu-item" onclick="runStorageDiagnostics()">
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16"></path><path d="M8 20V10"></path><path d="M13 20V4"></path><path d="M18 20v-7"></path></svg>
       <span style="flex:1;">Storage Check</span>
@@ -2935,6 +2961,90 @@
   </div>
 
   <!-- DELETED ITEMS SCREEN -->
+  <div class="screen" id="screen-mockup">
+    <div class="content">
+      <div class="cq-back-header">
+        <button type="button" class="cq-back-btn" onclick="closeMockupScreen()">&#8592; Back</button>
+        <span class="section-label" style="margin:0;">Mockup</span>
+      </div>
+      <div class="field-hint" style="margin-bottom:12px;">Pick one fabric photo. It fills the cushion face and the piping, and downloads as a PNG with a transparent background. Rendering takes about 20&ndash;50 seconds.</div>
+
+      <div class="field">
+        <label for="mockup-product">Product</label>
+        <select id="mockup-product">
+          <option value="cushion">Cushion</option>
+          <option value="rug" disabled>Rug (coming soon)</option>
+          <option value="curtain" disabled>Curtain (coming soon)</option>
+          <option value="bedding" disabled>Bedding (coming soon)</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Fabric photo</label>
+        <div class="photo-btn-row">
+          <button type="button" class="scan-btn" style="flex:1;" onclick="document.getElementById('mockup-input-camera').click()">Take photo</button>
+          <button type="button" class="scan-btn" style="flex:1;" onclick="document.getElementById('mockup-input-upload').click()">Upload photo</button>
+        </div>
+        <button type="button" class="scan-btn" style="width:100%; margin-top:8px; padding:11px 0;" onclick="openPhotoPicker('mockup')">Choose from Gallery</button>
+        <input type="file" id="mockup-input-camera" accept="image/*" capture="environment" style="display:none;" onchange="handleMockupFile(event)">
+        <input type="file" id="mockup-input-upload" accept="image/*" style="display:none;" onchange="handleMockupFile(event)">
+        <div class="photo-upload-box" id="mockup-photo-box" style="width:100%; height:170px; margin-top:8px;">
+          <span class="photo-placeholder" id="mockup-photo-placeholder">&#128247;<br>No photo yet</span>
+          <img id="mockup-photo-preview" style="display:none;" alt="">
+          <button type="button" class="photo-remove" id="mockup-photo-remove" style="display:none;" onclick="clearMockupPhoto()">&#10005;</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="mockup-name">Design name <span style="font-weight:400; text-transform:none; color:var(--text-secondary);">(optional)</span></label>
+        <input type="text" id="mockup-name" placeholder="Used in the file name" autocomplete="off">
+      </div>
+
+      <div class="btn-row" style="margin-bottom:10px;">
+        <button type="button" class="btn btn-save" id="mockup-generate-btn" onclick="generateMockup()">Generate mockup</button>
+      </div>
+      <div class="field-hint mockup-status" id="mockup-status"></div>
+
+      <div id="mockup-result" style="display:none; margin-bottom:16px;">
+        <div class="mockup-result-frame"><img id="mockup-result-img" alt="Finished mockup"></div>
+        <div class="photo-btn-row" style="margin-top:10px;">
+          <button type="button" class="scan-btn" style="flex:1; padding:11px 0;" onclick="downloadMockup()">Save PNG</button>
+          <button type="button" class="scan-btn" id="mockup-share-btn" style="flex:1; padding:11px 0; display:none;" onclick="shareMockup()">Share</button>
+        </div>
+      </div>
+
+      <button type="button" class="chip" id="mockup-settings-toggle" onclick="toggleMockupSettings()" style="width:100%;">Mockup service settings &#9662;</button>
+      <div id="mockup-settings-panel" style="display:none; margin-top:10px;">
+        <div class="field">
+          <label for="mockup-service-url">Service URL</label>
+          <input type="text" id="mockup-service-url" placeholder="https://your-mockup-service.workers.dev" autocomplete="off" autocapitalize="off" spellcheck="false">
+        </div>
+        <div class="field">
+          <label for="mockup-service-token">Service token</label>
+          <input type="password" id="mockup-service-token" placeholder="Paste the token" autocomplete="off">
+          <div class="field-hint">Saved on this device only.</div>
+        </div>
+        <button type="button" class="scan-btn" style="width:100%; padding:11px 0;" onclick="saveMockupSettings()">Save settings</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="screen" id="screen-test-photo">
+    <div class="content">
+      <div class="cq-back-header">
+        <button type="button" class="cq-back-btn" onclick="closeTestPhotoScreen()">&#8592; Back</button>
+        <span class="section-label" style="margin:0;">Test Photo Storage</span>
+      </div>
+      <div class="field-hint" style="margin-bottom:14px;">Isolated test only -- doesn't touch any quote, gallery, or existing photo. Take or upload a photo and confirm it round-trips through Firebase Storage: uploads for real, and displays back using its real download URL, not a local copy.</div>
+
+      <button type="button" class="btn btn-save" style="width:100%; margin-bottom:8px;" onclick="triggerTestPhotoCapture()">&#128247; Take or Upload Test Photo</button>
+      <input type="file" id="test-photo-input" accept="image/*" capture="environment" style="display:none;" onchange="handleTestPhotoCapture(event)">
+
+      <div id="test-photo-status" class="field-hint" style="margin-bottom:14px;"></div>
+      <div id="test-photo-result"></div>
+    </div>
+  </div>
+
   <div class="screen" id="screen-deleted-items">
     <div class="content">
       <div class="cq-back-header">
@@ -4954,6 +5064,11 @@ function openPhotoPicker(target, entityId) {
 }
 
 function closePhotoPicker() {
+  if (screenBeforePhotoPicker === "mockup") {
+    document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
+    document.getElementById("screen-mockup").classList.add("active");
+    return;
+  }
   if (screenBeforePhotoPicker === "meeting-detail") {
     document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
     document.getElementById("screen-meeting-detail").classList.add("active");
@@ -5026,6 +5141,9 @@ async function selectPickedPhoto(index) {
     previewEl.style.display = "block";
     document.getElementById("photo-remove").style.display = "flex";
     document.getElementById("photo-box").classList.add("has-photo");
+    closePhotoPicker();
+  } else if (photoPickerTarget === "mockup") {
+    setMockupPhoto(p.photo);
     closePhotoPicker();
   } else if (photoPickerTarget === "item") {
     itemPhotoDataUrl = p.photo;
@@ -9468,6 +9586,78 @@ function closeDeletedItemsScreen() {
 }
 
 // ---------------------------------------------------------------
+// Test Photo Storage: an isolated, throwaway check that Firebase Storage
+// actually works end to end on this device -- upload, then display back
+// using the real download URL Firebase returns, not a local copy. Never
+// touches any real quote, gallery, or session photo.
+// ---------------------------------------------------------------
+let screenBeforeTestPhoto = "calc";
+
+function openTestPhotoScreen() {
+  document.getElementById("hamburger-drawer").classList.remove("show");
+  document.getElementById("hamburger-backdrop").classList.remove("show");
+  const activeScreen = document.querySelector(".screen.active");
+  if (activeScreen) screenBeforeTestPhoto = activeScreen.id.replace("screen-", "");
+
+  document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
+  document.getElementById("screen-test-photo").classList.add("active");
+  document.getElementById("tabbar").style.display = "none";
+  document.getElementById("test-photo-status").textContent = "";
+  document.getElementById("test-photo-result").innerHTML = "";
+}
+
+function closeTestPhotoScreen() {
+  document.getElementById("tabbar").style.display = "flex";
+  showScreen(screenBeforeTestPhoto);
+}
+
+function triggerTestPhotoCapture() {
+  document.getElementById("test-photo-input").click();
+}
+
+async function handleTestPhotoCapture(event) {
+  const file = event.target.files && event.target.files[0];
+  event.target.value = "";
+  if (!file) return;
+
+  const statusEl = document.getElementById("test-photo-status");
+  const resultEl = document.getElementById("test-photo-result");
+  resultEl.innerHTML = "";
+
+  if (!auth.currentUser) {
+    statusEl.innerHTML = '<span style="color:var(--rust);">Not signed in \u2014 this shouldn\u2019t be possible since the app is gated behind sign-in. Something is wrong; try signing out and back in.</span>';
+    return;
+  }
+
+  try {
+    statusEl.textContent = "Preparing photo\u2026";
+    const dataUrl = await captureAndCropPhoto(file);
+
+    statusEl.textContent = "Uploading to Firebase Storage\u2026";
+    const storage = firebase.storage();
+    const path = "test-uploads/" + auth.currentUser.uid + "/" + Date.now() + ".jpg";
+    const ref = storage.ref(path);
+    await ref.putString(dataUrl, "data_url", { contentType: "image/jpeg" });
+
+    statusEl.textContent = "Fetching the real download URL back from Storage\u2026";
+    const downloadUrl = await ref.getDownloadURL();
+
+    statusEl.innerHTML = '<span style="color:var(--green); font-weight:600;">Success \u2014 uploaded and confirmed round-trip through Firebase Storage.</span>';
+    resultEl.innerHTML =
+      '<img src="' + downloadUrl + '" alt="" style="width:100%; border-radius:12px; border:1.5px solid var(--border); margin-bottom:8px;">' +
+      '<div class="field-hint" style="word-break:break-all;">Real Storage URL (open this directly in a browser to double-check it\u2019s not a local file):<br>' +
+      '<a href="' + downloadUrl + '" target="_blank" style="color:var(--terracotta-dark);">' + downloadUrl + '</a></div>' +
+      '<div class="field-hint" style="margin-top:6px;">Stored at: ' + escapeHtml(path) + '</div>';
+  } catch (e) {
+    let msg = e && e.message ? e.message : "Unknown error";
+    if (e && e.code === "storage/unauthorized") {
+      msg = "Storage rules are blocking this upload. The Storage security rules likely still need to be published in the Firebase Console (same step as Firestore's rules, but under Storage \u2192 Rules).";
+    }
+    statusEl.innerHTML = '<span style="color:var(--rust);">Upload failed: ' + escapeHtml(msg) + '</span>';
+  }
+}
+
+// ---------------------------------------------------------------
 // Run List: a live, disposable working list assembled by scanning
 // fabric-hanger QR codes against existing Saved Quotes. Not a new
 // quote store -- just id references into getQuotes(), resolved fresh
@@ -12063,6 +12253,251 @@ async function checkBackupReminder() {
 }
 
 // ---------------------------------------------------------------
+// Mockup: sends ONE fabric photo to the NexTex mockup service, which
+// places it on both the cushion face and the piping and returns a PNG
+// with a transparent background. Nothing here touches quotes, photos or
+// any existing storage -- the only thing saved is the service URL and
+// token, under its own key (nextex_mockup_settings). Results are shown
+// and downloaded, not stored.
+// ---------------------------------------------------------------
+let screenBeforeMockup = "calc";
+let mockupTabbarDisplay = "flex";
+let mockupSourceDataUrl = null;
+let mockupResultBlob = null;
+let mockupResultUrl = null;
+let mockupBusy = false;
+let mockupTimer = null;
+
+async function getMockupSettings() {
+  const raw = await storageGet("nextex_mockup_settings");
+  try { return raw ? JSON.parse(raw) : {}; } catch (e) { return {}; }
+}
+
+async function loadMockupSettingsIntoForm() {
+  const cfg = await getMockupSettings();
+  document.getElementById("mockup-service-url").value = cfg.url || "";
+  document.getElementById("mockup-service-token").value = cfg.token || "";
+}
+
+async function saveMockupSettings() {
+  const url = document.getElementById("mockup-service-url").value.trim();
+  const token = document.getElementById("mockup-service-token").value.trim();
+  if (url && !/^https:\/\//i.test(url)) {
+    showToast("The service URL must start with https://", "error");
+    return;
+  }
+  const ok = await storageSet("nextex_mockup_settings", JSON.stringify({ url: url, token: token }));
+  showToast(ok ? "Mockup settings saved." : "Could not save the settings.", ok ? "success" : "error");
+}
+
+function toggleMockupSettings() {
+  const panel = document.getElementById("mockup-settings-panel");
+  const opening = panel.style.display === "none";
+  panel.style.display = opening ? "block" : "none";
+  document.getElementById("mockup-settings-toggle").innerHTML = "Mockup service settings " + (opening ? "&#9652;" : "&#9662;");
+}
+
+function setMockupStatus(message, isError) {
+  const el = document.getElementById("mockup-status");
+  el.textContent = message || "";
+  el.classList.toggle("error", !!isError);
+}
+
+function openMockupScreen() {
+  document.getElementById("hamburger-drawer").classList.remove("show");
+  document.getElementById("hamburger-backdrop").classList.remove("show");
+  const activeScreen = document.querySelector(".screen.active");
+  if (activeScreen && activeScreen.id !== "screen-mockup") screenBeforeMockup = activeScreen.id.replace("screen-", "");
+  mockupTabbarDisplay = document.getElementById("tabbar").style.display || "flex";
+  document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
+  document.getElementById("screen-mockup").classList.add("active");
+  document.getElementById("tabbar").style.display = "none";
+  document.getElementById("mockup-share-btn").style.display = (navigator.canShare ? "block" : "none");
+  loadMockupSettingsIntoForm();
+}
+
+function closeMockupScreen() {
+  const tabScreens = ["calc", "log", "suppliers", "customer"];
+  if (tabScreens.indexOf(screenBeforeMockup) !== -1) {
+    document.getElementById("tabbar").style.display = "flex";
+    showScreen(screenBeforeMockup);
+    return;
+  }
+  // Opened from a screen that isn't a main tab: go straight back to it.
+  document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
+  const back = document.getElementById("screen-" + screenBeforeMockup);
+  if (back) {
+    back.classList.add("active");
+    document.getElementById("tabbar").style.display = mockupTabbarDisplay;
+  } else {
+    document.getElementById("tabbar").style.display = "flex";
+    showScreen("calc");
+  }
+}
+
+function setMockupPhoto(dataUrl) {
+  mockupSourceDataUrl = dataUrl;
+  document.getElementById("mockup-photo-placeholder").style.display = "none";
+  const img = document.getElementById("mockup-photo-preview");
+  img.src = dataUrl;
+  img.style.display = "block";
+  document.getElementById("mockup-photo-remove").style.display = "flex";
+  document.getElementById("mockup-photo-box").classList.add("has-photo");
+  setMockupStatus("");
+}
+
+function clearMockupPhoto() {
+  mockupSourceDataUrl = null;
+  document.getElementById("mockup-photo-placeholder").style.display = "";
+  const img = document.getElementById("mockup-photo-preview");
+  img.removeAttribute("src");
+  img.style.display = "none";
+  document.getElementById("mockup-photo-remove").style.display = "none";
+  document.getElementById("mockup-photo-box").classList.remove("has-photo");
+}
+
+async function handleMockupFile(event) {
+  const file = event.target.files && event.target.files[0];
+  event.target.value = "";
+  if (!file) return;
+  try {
+    setMockupPhoto(await compressImageFile(file, 1600, 0.9));
+  } catch (e) {
+    showToast("Could not read that photo.", "error");
+  }
+}
+
+// Shrinks the chosen photo to a JPEG (longest side 1200px) so the upload is quick.
+function mockupPrepareImage(dataUrl) {
+  return new Promise(function(resolve, reject) {
+    const img = new Image();
+    img.onerror = function() { reject(new Error("Could not read the photo.")); };
+    img.onload = function() {
+      const maxDim = 1200;
+      let w = img.width, h = img.height;
+      if (Math.max(w, h) > maxDim) {
+        const scale = maxDim / Math.max(w, h);
+        w = Math.round(w * scale);
+        h = Math.round(h * scale);
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+      canvas.toBlob(function(blob) {
+        if (blob) resolve(blob); else reject(new Error("Could not prepare the photo."));
+      }, "image/jpeg", 0.9);
+    };
+    img.src = dataUrl;
+  });
+}
+
+// Same photo in = same key = the service can reuse its saved render.
+async function mockupDesignKey(blob) {
+  try {
+    const digest = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
+    return Array.from(new Uint8Array(digest)).slice(0, 8).map(function(b) { return b.toString(16).padStart(2, "0"); }).join("");
+  } catch (e) {
+    return "t" + Date.now();
+  }
+}
+
+async function generateMockup() {
+  // Lock immediately (before any await) so a double-tap can never start two renders.
+  if (mockupBusy) return;
+  mockupBusy = true;
+  const btn = document.getElementById("mockup-generate-btn");
+  btn.disabled = true;
+  let abortTimer = null;
+  try {
+    if (!mockupSourceDataUrl) {
+      showToast("Choose a fabric photo first.", "error");
+      return;
+    }
+    const cfg = await getMockupSettings();
+    if (!cfg.url || !cfg.token) {
+      showToast("Add the mockup service URL and token first.", "error");
+      document.getElementById("mockup-settings-panel").style.display = "block";
+      document.getElementById("mockup-settings-toggle").innerHTML = "Mockup service settings &#9652;";
+      return;
+    }
+
+    setMockupStatus("Preparing photo...");
+    const started = Date.now();
+    const blob = await mockupPrepareImage(mockupSourceDataUrl);
+    const form = new FormData();
+    form.append("product", document.getElementById("mockup-product").value);
+    form.append("designKey", await mockupDesignKey(blob));
+    form.append("mode", "export");
+    form.append("design", blob, "fabric.jpg");
+
+    mockupTimer = setInterval(function() {
+      setMockupStatus("Rendering... " + Math.round((Date.now() - started) / 1000) + "s (usually 20-50s)");
+    }, 1000);
+    setMockupStatus("Rendering... 0s (usually 20-50s)");
+
+    const controller = new AbortController();
+    abortTimer = setTimeout(function() { controller.abort(); }, 150000);
+    const res = await fetch(cfg.url, {
+      method: "POST",
+      headers: { "x-app-token": cfg.token },
+      body: form,
+      signal: controller.signal
+    });
+    if (!res.ok) {
+      if (res.status === 401) throw new Error("The service token is not right. Check it in Mockup service settings.");
+      const detail = await res.text().catch(function() { return ""; });
+      throw new Error("The mockup service returned an error (" + res.status + "). " + detail.slice(0, 140));
+    }
+    const out = await res.blob();
+    if (mockupResultUrl) URL.revokeObjectURL(mockupResultUrl);
+    mockupResultBlob = out;
+    mockupResultUrl = URL.createObjectURL(out);
+    document.getElementById("mockup-result-img").src = mockupResultUrl;
+    document.getElementById("mockup-result").style.display = "block";
+    const cached = res.headers.get("X-Cache") === "HIT";
+    setMockupStatus(cached ? "Done. Loaded from saved renders." : "Done in " + Math.round((Date.now() - started) / 1000) + "s.");
+    showToast("Mockup ready.", "success");
+  } catch (e) {
+    const msg = (e && e.name === "AbortError")
+      ? "The mockup took too long. Try again."
+      : (e && e.message ? e.message : "Something went wrong.");
+    const looksLikeNetwork = e instanceof TypeError;
+    setMockupStatus(looksLikeNetwork ? "Could not reach the mockup service. Check the URL in Mockup service settings and your connection." : msg, true);
+  } finally {
+    clearTimeout(abortTimer);
+    clearInterval(mockupTimer);
+    mockupBusy = false;
+    btn.disabled = false;
+  }
+}
+
+function mockupFileName() {
+  const raw = document.getElementById("mockup-name").value.trim() || document.getElementById("mockup-product").value;
+  const safe = raw.replace(/[^a-z0-9\-_ ]/gi, "").trim().replace(/\s+/g, "_") || "cushion";
+  return "NexTex_Mockup_" + safe + "_" + new Date().toISOString().slice(0, 10) + ".png";
+}
+
+function downloadMockup() {
+  if (!mockupResultBlob) return;
+  const a = document.createElement("a");
+  a.href = mockupResultUrl;
+  a.download = mockupFileName();
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+async function shareMockup() {
+  if (!mockupResultBlob) return;
+  const file = new File([mockupResultBlob], mockupFileName(), { type: "image/png" });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: "NexTex mockup" }); } catch (e) { /* cancelled */ }
+  } else {
+    downloadMockup();
+  }
+}
+
+// ---------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------
 async function initApp() {
@@ -12085,6 +12520,7 @@ async function initApp() {
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-storage-compat.js"></script>
 <script>
   const firebaseConfig = {
     apiKey: "AIzaSyBr8U_6NYiWN7crBSZ1vzdbc4Ds82mKWWo",
