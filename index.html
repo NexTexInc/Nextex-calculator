@@ -3032,7 +3032,7 @@
           <button type="button" class="scan-btn" style="flex:1;" onclick="document.getElementById('mockup-input-upload').click()">Upload photo</button>
         </div>
         <button type="button" class="scan-btn" style="width:100%; margin-top:8px; padding:11px 0;" onclick="openPhotoPicker('mockup')">Choose from Gallery</button>
-        <input type="file" id="mockup-input-camera" accept="image/*" capture="environment" style="display:none;" onchange="handleMockupFile(event)">
+        <input type="file" id="mockup-input-camera" accept="image/*" capture="environment" style="display:none;" onchange="handleMockupFile(event, true)">
         <input type="file" id="mockup-input-upload" accept="image/*" style="display:none;" onchange="handleMockupFile(event)">
         <div class="photo-upload-box" id="mockup-photo-box" style="width:100%; height:170px; margin-top:8px;">
           <span class="photo-placeholder" id="mockup-photo-placeholder">&#128247;<br>No photo yet</span>
@@ -6116,7 +6116,7 @@ let itemCreationPackType = "SINGLE";
 let cropperInstance = null;
 let cropResolveCallback = null;
 
-function openCropModal(dataUrl) {
+function openCropModal(dataUrl, aspectRatio) {
   return new Promise(function(resolve) {
     ensureCropperLibLoaded().then(function() {
       cropResolveCallback = resolve;
@@ -6124,9 +6124,9 @@ function openCropModal(dataUrl) {
       img.src = dataUrl;
       document.getElementById("crop-overlay").classList.add("show");
       if (img.complete) {
-        startCropper(img);
+        startCropper(img, aspectRatio);
       } else {
-        img.onload = function() { startCropper(img); };
+        img.onload = function() { startCropper(img, aspectRatio); };
       }
     }).catch(function() {
       showToast("Could not load the crop tool. Check your connection and try again.", "error");
@@ -6135,13 +6135,11 @@ function openCropModal(dataUrl) {
   });
 }
 
-function startCropper(img) {
+function startCropper(img, aspectRatio) {
   if (cropperInstance) { cropperInstance.destroy(); cropperInstance = null; }
-  cropperInstance = new window.Cropper(img, {
-    viewMode: 1,
-    autoCropArea: 0.9,
-    background: false
-  });
+  const opts = { viewMode: 1, autoCropArea: 0.9, background: false };
+  if (aspectRatio) opts.aspectRatio = aspectRatio;
+  cropperInstance = new window.Cropper(img, opts);
 }
 
 function confirmCrop() {
@@ -6166,10 +6164,12 @@ function cancelCrop() {
 
 // Shared by every Take/Upload photo entry point in the app: reads the file,
 // runs it through the crop step, and returns the cropped data URL -- or
-// null if the user cancelled the crop for that photo.
-async function captureAndCropPhoto(file) {
+// null if the user cancelled the crop for that photo. aspectRatio is
+// optional -- omitted (the default for most callers) means a free-form
+// crop; a fixed ratio like 1 (square) locks the crop box to that shape.
+async function captureAndCropPhoto(file, aspectRatio) {
   const rawDataUrl = await readFileAsDataURL(file);
-  return await openCropModal(rawDataUrl);
+  return await openCropModal(rawDataUrl, aspectRatio);
 }
 
 let itemCreationCategory = "curtains";
@@ -13302,12 +13302,22 @@ function clearMockupPhoto() {
   document.getElementById("mockup-photo-box").classList.remove("has-photo");
 }
 
-async function handleMockupFile(event) {
+async function handleMockupFile(event, fromCamera) {
   const file = event.target.files && event.target.files[0];
   event.target.value = "";
   if (!file) return;
   try {
-    setMockupPhoto(await compressImageFile(file, 1600, 0.9));
+    if (fromCamera) {
+      // A phone's camera capture is rarely square, and the mockup service
+      // fills the (square) cushion face from this image -- an uncropped
+      // portrait photo sent straight through was producing a black face.
+      // Forcing a square crop here first is the fix.
+      const cropped = await captureAndCropPhoto(file, 1);
+      if (!cropped) return; // user cancelled the crop -- leave the existing photo (if any) alone
+      setMockupPhoto(cropped);
+    } else {
+      setMockupPhoto(await compressImageFile(file, 1600, 0.9));
+    }
   } catch (e) {
     showToast("Could not read that photo.", "error");
   }
