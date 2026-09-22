@@ -1495,6 +1495,14 @@
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
       <span style="flex:1;">Test Photo Storage</span>
     </button>
+    <button type="button" class="hamburger-menu-item" onclick="migrateLocalQuotesToCloud()">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+      <span style="flex:1;">Migrate Quotes to Cloud</span>
+    </button>
+    <button type="button" class="hamburger-menu-item" onclick="openTestCloudQuotesScreen()">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+      <span style="flex:1;">Test Cloud Quotes</span>
+    </button>
     <button type="button" class="hamburger-menu-item" onclick="runStorageDiagnostics()">
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16"></path><path d="M8 20V10"></path><path d="M13 20V4"></path><path d="M18 20v-7"></path></svg>
       <span style="flex:1;">Storage Check</span>
@@ -3026,6 +3034,18 @@
         </div>
         <button type="button" class="scan-btn" style="width:100%; padding:11px 0;" onclick="saveMockupSettings()">Save settings</button>
       </div>
+    </div>
+  </div>
+
+  <div class="screen" id="screen-test-cloud-quotes">
+    <div class="content">
+      <div class="cq-back-header">
+        <button type="button" class="cq-back-btn" onclick="closeTestCloudQuotesScreen()">&#8592; Back</button>
+        <span class="section-label" style="margin:0;">Test Cloud Quotes</span>
+      </div>
+      <div class="field-hint" style="margin-bottom:14px;">Read-only. Reads directly from Firestore's quotes collection -- separate from your real Saved Quotes screen, which still runs on local storage until the actual cutover happens.</div>
+      <div id="test-cloud-quotes-status" class="field-hint" style="margin-bottom:10px;"></div>
+      <div id="test-cloud-quotes-list"></div>
     </div>
   </div>
 
@@ -4988,6 +5008,148 @@ async function saveQuotes(list) {
   });
   const indexOk = await storageSet("nextex_quotes_index", JSON.stringify(index));
   return allOk && indexOk;
+}
+
+// ---------------------------------------------------------------
+// Cloud quotes (Firestore + Storage) -- built and verifiable in
+// isolation. getQuotes()/saveQuotes() above are UNCHANGED and still
+// what the live app actually uses; nothing here touches them yet.
+// Once you've confirmed (via "Migrate Quotes to Cloud" + "Test Cloud
+// Quotes") that this reads/writes correctly, the actual cutover is a
+// small, separate, deliberate step -- not this one.
+// ---------------------------------------------------------------
+
+// Uploads a quote's photo (a local data: URL) to Firebase Storage and
+// returns the real download URL. A photo that's already a URL (was
+// uploaded on a previous save) is left alone -- no redundant re-upload.
+async function uploadQuotePhotoToCloud(quoteId, photo) {
+  if (!photo) return "";
+  if (!photo.startsWith("data:")) return photo; // already a Storage URL
+  const storage = firebase.storage();
+  const path = "quote-photos/" + quoteId + ".jpg";
+  const ref = storage.ref(path);
+  await ref.putString(photo, "data_url", { contentType: "image/jpeg" });
+  return await ref.getDownloadURL();
+}
+
+async function getQuotesFromCloud() {
+  const snapshot = await db.collection("quotes").get();
+  return snapshot.docs.map(function(doc) {
+    return Object.assign({ id: doc.id }, doc.data());
+  });
+}
+
+// Mirrors saveQuotes()'s contract exactly: pass the FULL list, it syncs
+// Firestore to match (adds/updates changed quotes, deletes any quote
+// that's no longer in the list). Photos are uploaded to Storage as part
+// of this, so the Firestore document itself stays small regardless of
+// photo size.
+async function saveQuotesToCloud(list) {
+  try {
+    const snapshot = await db.collection("quotes").get();
+    const existingIds = new Set(snapshot.docs.map(function(d) { return d.id; }));
+    const newIds = new Set(list.map(function(q) { return q.id; }));
+
+    const docsToWrite = [];
+    for (const q of list) {
+      const data = Object.assign({}, q);
+      delete data.id;
+      data.photo = await uploadQuotePhotoToCloud(q.id, q.photo);
+      docsToWrite.push({ id: q.id, data: data });
+    }
+
+    const idsToDelete = [];
+    existingIds.forEach(function(id) { if (!newIds.has(id)) idsToDelete.push(id); });
+
+    // Firestore batches cap at 500 operations; chunk defensively even
+    // though current data volumes are nowhere near that.
+    const ops = docsToWrite.map(function(d) { return { type: "set", id: d.id, data: d.data }; })
+      .concat(idsToDelete.map(function(id) { return { type: "delete", id: id }; }));
+    for (let i = 0; i < ops.length; i += 400) {
+      const batch = db.batch();
+      ops.slice(i, i + 400).forEach(function(op) {
+        const ref = db.collection("quotes").doc(op.id);
+        if (op.type === "set") batch.set(ref, op.data);
+        else batch.delete(ref);
+      });
+      await batch.commit();
+    }
+    return true;
+  } catch (e) {
+    console.error("saveQuotesToCloud failed:", e);
+    return false;
+  }
+}
+
+let screenBeforeMigrateQuotes = "calc";
+
+async function migrateLocalQuotesToCloud() {
+  document.getElementById("hamburger-drawer").classList.remove("show");
+  document.getElementById("hamburger-backdrop").classList.remove("show");
+  const localQuotes = await getQuotes(); // still the local-storage version at this point
+  if (localQuotes.length === 0) {
+    showToast("No local quotes to migrate.", "error");
+    return;
+  }
+  showConfirm(
+    "Migrate " + localQuotes.length + " quote" + (localQuotes.length === 1 ? "" : "s") + " (and their photos) to the cloud? This only copies them -- nothing local is deleted or changed. Running it again later won't create duplicates, but it will re-upload photos, so there's no need to run it more than once unless new local quotes are added.",
+    async function() {
+      showToast("Migrating " + localQuotes.length + " quotes\u2026", "success");
+      const ok = await saveQuotesToCloud(localQuotes);
+      if (ok) {
+        showToast("Migrated " + localQuotes.length + " quotes to the cloud. Use \u201cTest Cloud Quotes\u201d to verify.", "success");
+      } else {
+        showToast("Migration hit an error partway through \u2014 check the browser console, or try again (it's safe to re-run).", "error");
+      }
+    }
+  );
+}
+
+function openTestCloudQuotesScreen() {
+  document.getElementById("hamburger-drawer").classList.remove("show");
+  document.getElementById("hamburger-backdrop").classList.remove("show");
+  const activeScreen = document.querySelector(".screen.active");
+  if (activeScreen) screenBeforeMigrateQuotes = activeScreen.id.replace("screen-", "");
+  document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
+  document.getElementById("screen-test-cloud-quotes").classList.add("active");
+  document.getElementById("tabbar").style.display = "none";
+  renderTestCloudQuotesScreen();
+}
+
+function closeTestCloudQuotesScreen() {
+  document.getElementById("tabbar").style.display = "flex";
+  showScreen(screenBeforeMigrateQuotes);
+}
+
+async function renderTestCloudQuotesScreen() {
+  const statusEl = document.getElementById("test-cloud-quotes-status");
+  const listEl = document.getElementById("test-cloud-quotes-list");
+  statusEl.textContent = "Reading directly from Firestore\u2026";
+  listEl.innerHTML = "";
+  try {
+    const cloudQuotes = await getQuotesFromCloud();
+    if (cloudQuotes.length === 0) {
+      statusEl.innerHTML = '<span style="color:var(--rust);">No quotes found in the cloud yet. Run \u201cMigrate Quotes to Cloud\u201d first.</span>';
+      return;
+    }
+    statusEl.innerHTML = '<span style="color:var(--green); font-weight:600;">' + cloudQuotes.length + ' quote' + (cloudQuotes.length === 1 ? "" : "s") + ' read directly from Firestore.</span>';
+    listEl.innerHTML = cloudQuotes.map(function(q) {
+      const photoHtml = q.photo
+        ? '<img src="' + q.photo + '" alt="" style="width:44px; height:44px; object-fit:cover; border-radius:8px; flex-shrink:0;">'
+        : '<span style="width:44px; height:44px; border-radius:8px; background:var(--border); display:flex; align-items:center; justify-content:center; flex-shrink:0;">&#128247;</span>';
+      const priceText = (q.prices && q.prices[0]) ? fmt(q.prices[0].usd) : "";
+      return '<div style="display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1.5px solid var(--border);">' +
+        photoHtml +
+        '<div style="flex:1; min-width:0;">' +
+          '<div style="font-weight:800; color:var(--navy); font-size:14px;">' + escapeHtml(q.item || "(no item #)") + '</div>' +
+          '<div style="font-size:12px; color:var(--terracotta-dark);">' + escapeHtml(q.vendor || "") + '</div>' +
+        '</div>' +
+        '<div style="font-weight:800; color:var(--navy); font-size:14px; flex-shrink:0;">' + escapeHtml(priceText) + '</div>' +
+      '</div>';
+    }).join("");
+  } catch (e) {
+    statusEl.innerHTML = '<span style="color:var(--rust);">Could not read from Firestore: ' + escapeHtml(e.message || "unknown error") + '</span>';
+  }
 }
 
 function triggerSessionPhotoCamera(context) {
