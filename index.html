@@ -1503,6 +1503,22 @@
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
       <span style="flex:1;">Test Cloud Quotes</span>
     </button>
+    <button type="button" class="hamburger-menu-item" onclick="migrateLocalGalleryToCloud()">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+      <span style="flex:1;">Migrate Gallery to Cloud</span>
+    </button>
+    <button type="button" class="hamburger-menu-item" onclick="openTestCloudGalleryScreen()">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+      <span style="flex:1;">Test Cloud Gallery</span>
+    </button>
+    <button type="button" class="hamburger-menu-item" onclick="migrateLocalItemsToCloud()">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+      <span style="flex:1;">Migrate Items to Cloud</span>
+    </button>
+    <button type="button" class="hamburger-menu-item" onclick="openTestCloudItemsScreen()">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+      <span style="flex:1;">Test Cloud Items</span>
+    </button>
     <button type="button" class="hamburger-menu-item" onclick="runStorageDiagnostics()">
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16"></path><path d="M8 20V10"></path><path d="M13 20V4"></path><path d="M18 20v-7"></path></svg>
       <span style="flex:1;">Storage Check</span>
@@ -1584,6 +1600,15 @@
     <div class="confirm-actions">
       <button class="btn btn-clear-all" id="add-album-confirm-btn" style="flex:none; padding:8px 18px;" onclick="confirmAddToAlbum()">Add</button>
       <button class="btn" id="add-album-cancel-btn" style="flex:none; padding:8px 18px; background:var(--border); color:var(--text-primary);" onclick="cancelAddToAlbum()">Cancel</button>
+    </div>
+  </div>
+
+  <div id="add-meeting-banner" class="confirm-banner">
+    <div class="confirm-message">Add to which meeting?</div>
+    <select id="add-meeting-target" style="width:100%; margin-bottom:8px;"></select>
+    <div class="confirm-actions">
+      <button class="btn btn-clear-all" style="flex:none; padding:8px 18px;" onclick="confirmAddToMeeting()">Add</button>
+      <button class="btn" style="flex:none; padding:8px 18px; background:var(--border); color:var(--text-primary);" onclick="cancelAddToMeeting()">Cancel</button>
     </div>
   </div>
 
@@ -1763,6 +1788,7 @@
         <button type="button" class="swipe-lightbox-goto-btn" id="swipe-lightbox-goto-meeting-btn" onclick="goToMeetingFromGallery()" style="display:none;">Go to Meeting</button>
         <button type="button" class="swipe-lightbox-goto-btn" id="swipe-lightbox-goto-sourcing-btn" onclick="goToSourcingFromGallery()" style="display:none;">Go to Sourcing</button>
         <button type="button" class="swipe-lightbox-goto-btn" onclick="startAddGalleryPhotoToAlbum()">Add to Album</button>
+        <button type="button" class="swipe-lightbox-goto-btn" onclick="startAddGalleryPhotoToMeeting()">Add to Meeting</button>
         <button type="button" class="swipe-lightbox-goto-btn" id="swipe-lightbox-move-album-btn" onclick="startMoveGalleryPhoto()" style="display:none;">Move to Album</button>
         <button type="button" class="swipe-lightbox-goto-btn" onclick="initiateQuoteFromGalleryPhoto()">Initiate Supplier Quote</button>
         <button type="button" class="swipe-lightbox-goto-btn delete" onclick="confirmDeleteGalleryPhoto()">&#128465; Delete photo</button>
@@ -3019,6 +3045,8 @@
           <button type="button" class="scan-btn" style="flex:1; padding:11px 0;" onclick="downloadMockup()">Save PNG</button>
           <button type="button" class="scan-btn" id="mockup-share-btn" style="flex:1; padding:11px 0; display:none;" onclick="shareMockup()">Share</button>
         </div>
+        <button type="button" class="scan-btn" id="mockup-add-gallery-btn" style="width:100%; padding:11px 0; margin-top:8px;" onclick="addMockupToGallery()">Add to Gallery</button>
+        <div class="field-hint" style="margin-top:4px;">Saves it to Photo Gallery, where you can also add it to an album, tag it to a meeting, start a quote from it, or delete it.</div>
       </div>
 
       <button type="button" class="chip" id="mockup-settings-toggle" onclick="toggleMockupSettings()" style="width:100%;">Mockup service settings &#9662;</button>
@@ -3046,6 +3074,30 @@
       <div class="field-hint" style="margin-bottom:14px;">Read-only. Reads directly from Firestore's quotes collection -- separate from your real Saved Quotes screen, which still runs on local storage until the actual cutover happens.</div>
       <div id="test-cloud-quotes-status" class="field-hint" style="margin-bottom:10px;"></div>
       <div id="test-cloud-quotes-list"></div>
+    </div>
+  </div>
+
+  <div class="screen" id="screen-test-cloud-gallery">
+    <div class="content">
+      <div class="cq-back-header">
+        <button type="button" class="cq-back-btn" onclick="closeTestCloudGalleryScreen()">&#8592; Back</button>
+        <span class="section-label" style="margin:0;">Test Cloud Gallery</span>
+      </div>
+      <div class="field-hint" style="margin-bottom:14px;">Read-only. Reads directly from Firestore's gallery photos -- separate from your real Photo Gallery, which still runs on local storage until the actual cutover happens.</div>
+      <div id="test-cloud-gallery-status" class="field-hint" style="margin-bottom:10px;"></div>
+      <div id="test-cloud-gallery-grid" class="photo-gallery-grid"></div>
+    </div>
+  </div>
+
+  <div class="screen" id="screen-test-cloud-items">
+    <div class="content">
+      <div class="cq-back-header">
+        <button type="button" class="cq-back-btn" onclick="closeTestCloudItemsScreen()">&#8592; Back</button>
+        <span class="section-label" style="margin:0;">Test Cloud Items</span>
+      </div>
+      <div class="field-hint" style="margin-bottom:14px;">Read-only. Reads directly from Firestore's items collection -- separate from your real Database screen, which still runs on local storage until the actual cutover happens.</div>
+      <div id="test-cloud-items-status" class="field-hint" style="margin-bottom:10px;"></div>
+      <div id="test-cloud-items-list"></div>
     </div>
   </div>
 
@@ -4848,7 +4900,9 @@ async function downloadMeetingSummary() {
 // key's cumulative size threaten every feature's ability to save. Every
 // caller still works with the same full-object array shape as before;
 // only the storage underneath these two functions changed.
-async function getSessionPhotos() {
+// Kept for the migration tool and as an emergency reference -- no longer
+// used by the live app once Gallery's cutover happens.
+async function getSessionPhotosLocalLegacy() {
   // One-time migration: if the old single-blob format is still present,
   // split it into the new structure. The old blob is ONLY removed if the
   // new format actually saved successfully.
@@ -4856,7 +4910,7 @@ async function getSessionPhotos() {
   if (oldRaw !== null) {
     let oldList = [];
     try { oldList = JSON.parse(oldRaw) || []; } catch (e) { oldList = []; }
-    const migrated = await saveSessionPhotos(oldList);
+    const migrated = await saveSessionPhotosLocalLegacy(oldList);
     if (migrated) {
       await storageDelete("nextex_session_photos");
     } else {
@@ -4876,7 +4930,7 @@ async function getSessionPhotos() {
   return result;
 }
 
-async function saveSessionPhotos(list) {
+async function saveSessionPhotosLocalLegacy(list) {
   const indexRaw = await storageGet("nextex_session_photos_index");
   let oldIndex = [];
   try { oldIndex = indexRaw ? JSON.parse(indexRaw) : []; } catch (e) { oldIndex = []; }
@@ -4918,6 +4972,161 @@ async function saveSessionPhotos(list) {
   return allOk && indexOk;
 }
 
+// ---------------------------------------------------------------
+// LIVE Gallery storage: Firestore + Storage. Same concurrency-safe
+// pattern as quotes above -- saveSessionPhotos() only ever deletes an id
+// this device actually saw in its own last read and then dropped, never
+// something it never loaded, so a teammate's concurrent upload can't be
+// silently wiped out by someone else's stale save.
+// ---------------------------------------------------------------
+let lastLoadedSessionPhotoIds = null;
+
+async function uploadSessionPhotoToCloud(photoId, photo) {
+  if (!photo) return "";
+  if (!photo.startsWith("data:")) return photo; // already a Storage URL
+  const storage = firebase.storage();
+  const ref = storage.ref("gallery-photos/" + photoId + ".jpg");
+  await ref.putString(photo, "data_url", { contentType: "image/jpeg" });
+  return await ref.getDownloadURL();
+}
+
+async function getSessionPhotos() {
+  const snapshot = await db.collection("sessionPhotos").get();
+  const result = snapshot.docs.map(function(doc) {
+    return Object.assign({ id: doc.id }, doc.data());
+  });
+  lastLoadedSessionPhotoIds = new Set(result.map(function(p) { return p.id; }));
+  return result;
+}
+
+async function saveSessionPhotos(list) {
+  try {
+    const newIds = new Set(list.map(function(p) { return p.id; }));
+    const idsToDelete = [];
+    if (lastLoadedSessionPhotoIds) {
+      lastLoadedSessionPhotoIds.forEach(function(id) {
+        if (!newIds.has(id)) idsToDelete.push(id);
+      });
+    }
+
+    const docsToWrite = [];
+    for (const p of list) {
+      const data = Object.assign({}, p);
+      delete data.id;
+      data.photo = await uploadSessionPhotoToCloud(p.id, p.photo);
+      docsToWrite.push({ id: p.id, data: data });
+    }
+
+    const ops = docsToWrite.map(function(d) { return { type: "set", id: d.id, data: d.data }; })
+      .concat(idsToDelete.map(function(id) { return { type: "delete", id: id }; }));
+    for (let i = 0; i < ops.length; i += 400) {
+      const batch = db.batch();
+      ops.slice(i, i + 400).forEach(function(op) {
+        const ref = db.collection("sessionPhotos").doc(op.id);
+        if (op.type === "set") batch.set(ref, op.data);
+        else batch.delete(ref);
+      });
+      await batch.commit();
+    }
+    lastLoadedSessionPhotoIds = newIds;
+    return true;
+  } catch (e) {
+    console.error("saveSessionPhotos failed:", e);
+    return false;
+  }
+}
+
+async function getSessionPhotosFromCloud() {
+  return await getSessionPhotos();
+}
+
+// Additive-only -- for migration. Never deletes, safe from any device in
+// any order, same reasoning as upsertQuotesToCloud.
+async function upsertSessionPhotosToCloud(list) {
+  try {
+    const ops = [];
+    for (const p of list) {
+      const data = Object.assign({}, p);
+      delete data.id;
+      data.photo = await uploadSessionPhotoToCloud(p.id, p.photo);
+      ops.push({ id: p.id, data: data });
+    }
+    for (let i = 0; i < ops.length; i += 400) {
+      const batch = db.batch();
+      ops.slice(i, i + 400).forEach(function(op) {
+        batch.set(db.collection("sessionPhotos").doc(op.id), op.data);
+      });
+      await batch.commit();
+    }
+    return true;
+  } catch (e) {
+    console.error("upsertSessionPhotosToCloud failed:", e);
+    return false;
+  }
+}
+
+let screenBeforeMigrateGallery = "calc";
+
+async function migrateLocalGalleryToCloud() {
+  document.getElementById("hamburger-drawer").classList.remove("show");
+  document.getElementById("hamburger-backdrop").classList.remove("show");
+  const localPhotos = await getSessionPhotosLocalLegacy();
+  if (localPhotos.length === 0) {
+    showToast("No local gallery photos to migrate.", "error");
+    return;
+  }
+  showConfirm(
+    "Migrate " + localPhotos.length + " gallery photo" + (localPhotos.length === 1 ? "" : "s") + " to the cloud? This only adds/updates \u2014 it never deletes anything already in the cloud, so it's safe to run from multiple devices.",
+    async function() {
+      showToast("Migrating " + localPhotos.length + " photos\u2026", "success");
+      const ok = await upsertSessionPhotosToCloud(localPhotos);
+      if (ok) {
+        showToast("Migrated " + localPhotos.length + " photos to the cloud. Use \u201cTest Cloud Gallery\u201d to verify.", "success");
+      } else {
+        showToast("Migration hit an error partway through \u2014 check the browser console, or try again.", "error");
+      }
+    }
+  );
+}
+
+function openTestCloudGalleryScreen() {
+  document.getElementById("hamburger-drawer").classList.remove("show");
+  document.getElementById("hamburger-backdrop").classList.remove("show");
+  const activeScreen = document.querySelector(".screen.active");
+  if (activeScreen) screenBeforeMigrateGallery = activeScreen.id.replace("screen-", "");
+  document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
+  document.getElementById("screen-test-cloud-gallery").classList.add("active");
+  document.getElementById("tabbar").style.display = "none";
+  renderTestCloudGalleryScreen();
+}
+
+function closeTestCloudGalleryScreen() {
+  document.getElementById("tabbar").style.display = "flex";
+  showScreen(screenBeforeMigrateGallery);
+}
+
+async function renderTestCloudGalleryScreen() {
+  const statusEl = document.getElementById("test-cloud-gallery-status");
+  const gridEl = document.getElementById("test-cloud-gallery-grid");
+  statusEl.textContent = "Reading directly from Firestore\u2026";
+  gridEl.innerHTML = "";
+  try {
+    const cloudPhotos = await getSessionPhotosFromCloud();
+    if (cloudPhotos.length === 0) {
+      statusEl.innerHTML = '<span style="color:var(--rust);">No gallery photos found in the cloud yet. Run \u201cMigrate Gallery to Cloud\u201d first.</span>';
+      return;
+    }
+    statusEl.innerHTML = '<span style="color:var(--green); font-weight:600;">' + cloudPhotos.length + ' photo' + (cloudPhotos.length === 1 ? "" : "s") + ' read directly from Firestore.</span>';
+    gridEl.innerHTML = cloudPhotos.map(function(p) {
+      return p.photo
+        ? '<div class="photo-gallery-tile"><img src="' + p.photo + '" alt=""></div>'
+        : '<div class="photo-gallery-tile" style="display:flex; align-items:center; justify-content:center; color:var(--text-secondary);">&#128247;</div>';
+    }).join("");
+  } catch (e) {
+    statusEl.innerHTML = '<span style="color:var(--rust);">Could not read from Firestore: ' + escapeHtml(e.message || "unknown error") + '</span>';
+  }
+}
+
 // Quotes are stored the same way session photos are -- one-per-key for the
 // photo (nextex_quote_photo_<id>) plus a lightweight index
 // (nextex_quotes_index) holding every other field. Unlike a session photo,
@@ -4930,7 +5139,10 @@ function photoFingerprint(photo) {
   return photo.length + ":" + photo.slice(0, 24);
 }
 
-async function getQuotes() {
+// Kept for the migration tool and as an emergency reference -- no longer
+// used by the live app once the cutover below takes effect, but nothing
+// here is deleted.
+async function getQuotesLocalLegacy() {
   // One-time migration: if the old single-blob format is still present,
   // split it into the new structure. The old blob is ONLY removed if the
   // new format actually saved successfully -- losing the destination
@@ -4939,7 +5151,7 @@ async function getQuotes() {
   if (oldRaw !== null) {
     let oldList = [];
     try { oldList = JSON.parse(oldRaw) || []; } catch (e) { oldList = []; }
-    const migrated = await saveQuotes(oldList);
+    const migrated = await saveQuotesLocalLegacy(oldList);
     if (migrated) {
       await storageDelete("nextex_quotes");
     } else {
@@ -4966,7 +5178,7 @@ async function getQuotes() {
   return result;
 }
 
-async function saveQuotes(list) {
+async function saveQuotesLocalLegacy(list) {
   const indexRaw = await storageGet("nextex_quotes_index");
   let oldIndex = [];
   try { oldIndex = indexRaw ? JSON.parse(indexRaw) : []; } catch (e) { oldIndex = []; }
@@ -5032,26 +5244,91 @@ async function uploadQuotePhotoToCloud(quoteId, photo) {
   return await ref.getDownloadURL();
 }
 
-async function getQuotesFromCloud() {
+// ---------------------------------------------------------------
+// LIVE quote storage: Firestore + Storage. Every other part of the app
+// (Saved Quotes, Run List, Meetings, Sourcing, exports -- ~50 call sites)
+// calls getQuotes()/saveQuotes() and gets this, unchanged from their
+// point of view.
+//
+// saveQuotes() is NOT a naive "make Firestore match this list exactly"
+// sync. With several people using this at once, that pattern has a real
+// failure mode: if someone else adds a quote right after you last read
+// the list, and you then save your own edit from your now-stale copy, a
+// blind full-sync would delete their brand new quote simply because it
+// wasn't in the list you happened to be holding. Instead, saveQuotes()
+// only deletes ids that were part of THIS device's own most recent
+// getQuotes() read and are now missing -- i.e. ids you actually saw and
+// chose to remove. Anything added by someone else in between was never
+// in your snapshot, so it's never a delete candidate. This is enforced
+// via lastLoadedQuoteIds, updated on every getQuotes()/saveQuotes() call.
+// ---------------------------------------------------------------
+let lastLoadedQuoteIds = null;
+
+async function getQuotes() {
   const snapshot = await db.collection("quotes").get();
-  return snapshot.docs.map(function(doc) {
+  const result = snapshot.docs.map(function(doc) {
     return Object.assign({ id: doc.id }, doc.data());
   });
+  lastLoadedQuoteIds = new Set(result.map(function(q) { return q.id; }));
+  return result;
 }
 
-// Mirrors saveQuotes()'s contract exactly: pass the FULL list, it syncs
-// Firestore to match (adds/updates changed quotes, deletes any quote
-// that's no longer in the list). Photos are uploaded to Storage as part
-// of this, so the Firestore document itself stays small regardless of
-// photo size.
+async function saveQuotes(list) {
+  try {
+    const newIds = new Set(list.map(function(q) { return q.id; }));
+
+    // Only consider deleting an id this device actually saw before (via
+    // its last getQuotes() read) and has now dropped from its list.
+    // Never delete an id we never loaded -- that protects anything
+    // added concurrently by someone else.
+    const idsToDelete = [];
+    if (lastLoadedQuoteIds) {
+      lastLoadedQuoteIds.forEach(function(id) {
+        if (!newIds.has(id)) idsToDelete.push(id);
+      });
+    }
+
+    const docsToWrite = [];
+    for (const q of list) {
+      const data = Object.assign({}, q);
+      delete data.id;
+      data.photo = await uploadQuotePhotoToCloud(q.id, q.photo);
+      docsToWrite.push({ id: q.id, data: data });
+    }
+
+    // Firestore batches cap at 500 operations; chunk defensively even
+    // though current data volumes are nowhere near that.
+    const ops = docsToWrite.map(function(d) { return { type: "set", id: d.id, data: d.data }; })
+      .concat(idsToDelete.map(function(id) { return { type: "delete", id: id }; }));
+    for (let i = 0; i < ops.length; i += 400) {
+      const batch = db.batch();
+      ops.slice(i, i + 400).forEach(function(op) {
+        const ref = db.collection("quotes").doc(op.id);
+        if (op.type === "set") batch.set(ref, op.data);
+        else batch.delete(ref);
+      });
+      await batch.commit();
+    }
+    lastLoadedQuoteIds = newIds;
+    return true;
+  } catch (e) {
+    console.error("saveQuotes failed:", e);
+    return false;
+  }
+}
+
+// Read-only cloud accessor kept for the Test Cloud Quotes screen -- an
+// alias, not a separate data path, so it can never drift from the above.
+async function getQuotesFromCloud() {
+  return await getQuotes();
+}
+
 // Additive-only: upserts every quote in the list, but never deletes
 // anything in Firestore that isn't in the list. This is what migration
 // uses -- each device's local storage is its own separate, possibly
 // incomplete copy, so treating a shorter list as "the whole truth" and
-// deleting the difference (which is what saveQuotesToCloud below
-// correctly does for the live app, once there's one shared dataset)
-// would destroy other devices' already-migrated data. Safe to run from
-// as many devices as you want, in any order.
+// deleting the difference would destroy other devices' already-migrated
+// data. Safe to run from as many devices as you want, in any order.
 async function upsertQuotesToCloud(list) {
   try {
     const ops = [];
@@ -5075,56 +5352,12 @@ async function upsertQuotesToCloud(list) {
   }
 }
 
-// Mirrors saveQuotes()'s contract exactly: pass the FULL list, it syncs
-// Firestore to match (adds/updates changed quotes, deletes any quote
-// that's no longer in the list). Correct once the app has fully cut over
-// to one shared dataset -- NOT what migration should use, since a single
-// device's local list is only ever a partial view. Photos are uploaded
-// to Storage as part of this, so the Firestore document itself stays
-// small regardless of photo size.
-async function saveQuotesToCloud(list) {
-  try {
-    const snapshot = await db.collection("quotes").get();
-    const existingIds = new Set(snapshot.docs.map(function(d) { return d.id; }));
-    const newIds = new Set(list.map(function(q) { return q.id; }));
-
-    const docsToWrite = [];
-    for (const q of list) {
-      const data = Object.assign({}, q);
-      delete data.id;
-      data.photo = await uploadQuotePhotoToCloud(q.id, q.photo);
-      docsToWrite.push({ id: q.id, data: data });
-    }
-
-    const idsToDelete = [];
-    existingIds.forEach(function(id) { if (!newIds.has(id)) idsToDelete.push(id); });
-
-    // Firestore batches cap at 500 operations; chunk defensively even
-    // though current data volumes are nowhere near that.
-    const ops = docsToWrite.map(function(d) { return { type: "set", id: d.id, data: d.data }; })
-      .concat(idsToDelete.map(function(id) { return { type: "delete", id: id }; }));
-    for (let i = 0; i < ops.length; i += 400) {
-      const batch = db.batch();
-      ops.slice(i, i + 400).forEach(function(op) {
-        const ref = db.collection("quotes").doc(op.id);
-        if (op.type === "set") batch.set(ref, op.data);
-        else batch.delete(ref);
-      });
-      await batch.commit();
-    }
-    return true;
-  } catch (e) {
-    console.error("saveQuotesToCloud failed:", e);
-    return false;
-  }
-}
-
 let screenBeforeMigrateQuotes = "calc";
 
 async function migrateLocalQuotesToCloud() {
   document.getElementById("hamburger-drawer").classList.remove("show");
   document.getElementById("hamburger-backdrop").classList.remove("show");
-  const localQuotes = await getQuotes(); // still the local-storage version at this point
+  const localQuotes = await getQuotesLocalLegacy();
   if (localQuotes.length === 0) {
     showToast("No local quotes to migrate.", "error");
     return;
@@ -5582,9 +5815,15 @@ async function handleImportBackupFile(event) {
   );
 }
 
-async function getItems() {
+// Kept for the migration tool and as an emergency reference -- no longer
+// used by the live app once Items' cutover happens.
+async function getItemsLocalLegacy() {
   const raw = await storageGet("nextex_items");
   try { return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
+}
+
+async function saveItemsLocalLegacy(list) {
+  await storageSet("nextex_items", JSON.stringify(list));
 }
 
 async function getDeletedItems() {
@@ -5596,8 +5835,164 @@ async function saveDeletedItems(list) {
   await storageSet("nextex_deleted_items", JSON.stringify(list));
 }
 
+// ---------------------------------------------------------------
+// LIVE Items (Database) storage: Firestore + Storage. Same
+// concurrency-safe pattern as quotes and gallery -- saveItems() only
+// ever deletes an id this device actually saw in its own last read and
+// then dropped, never something it never loaded.
+// ---------------------------------------------------------------
+let lastLoadedItemIds = null;
+
+async function uploadItemPhotoToCloud(itemId, photo) {
+  if (!photo) return "";
+  if (!photo.startsWith("data:")) return photo; // already a Storage URL
+  const storage = firebase.storage();
+  const ref = storage.ref("item-photos/" + itemId + ".jpg");
+  await ref.putString(photo, "data_url", { contentType: "image/jpeg" });
+  return await ref.getDownloadURL();
+}
+
+async function getItems() {
+  const snapshot = await db.collection("items").get();
+  const result = snapshot.docs.map(function(doc) {
+    return Object.assign({ id: doc.id }, doc.data());
+  });
+  lastLoadedItemIds = new Set(result.map(function(it) { return it.id; }));
+  return result;
+}
+
 async function saveItems(list) {
-  await storageSet("nextex_items", JSON.stringify(list));
+  try {
+    const newIds = new Set(list.map(function(it) { return it.id; }));
+    const idsToDelete = [];
+    if (lastLoadedItemIds) {
+      lastLoadedItemIds.forEach(function(id) {
+        if (!newIds.has(id)) idsToDelete.push(id);
+      });
+    }
+
+    const docsToWrite = [];
+    for (const it of list) {
+      const data = Object.assign({}, it);
+      delete data.id;
+      data.photo = await uploadItemPhotoToCloud(it.id, it.photo);
+      docsToWrite.push({ id: it.id, data: data });
+    }
+
+    const ops = docsToWrite.map(function(d) { return { type: "set", id: d.id, data: d.data }; })
+      .concat(idsToDelete.map(function(id) { return { type: "delete", id: id }; }));
+    for (let i = 0; i < ops.length; i += 400) {
+      const batch = db.batch();
+      ops.slice(i, i + 400).forEach(function(op) {
+        const ref = db.collection("items").doc(op.id);
+        if (op.type === "set") batch.set(ref, op.data);
+        else batch.delete(ref);
+      });
+      await batch.commit();
+    }
+    lastLoadedItemIds = newIds;
+    return true;
+  } catch (e) {
+    console.error("saveItems failed:", e);
+    return false;
+  }
+}
+
+async function getItemsFromCloud() {
+  return await getItems();
+}
+
+// Additive-only -- for migration.
+async function upsertItemsToCloud(list) {
+  try {
+    const ops = [];
+    for (const it of list) {
+      const data = Object.assign({}, it);
+      delete data.id;
+      data.photo = await uploadItemPhotoToCloud(it.id, it.photo);
+      ops.push({ id: it.id, data: data });
+    }
+    for (let i = 0; i < ops.length; i += 400) {
+      const batch = db.batch();
+      ops.slice(i, i + 400).forEach(function(op) {
+        batch.set(db.collection("items").doc(op.id), op.data);
+      });
+      await batch.commit();
+    }
+    return true;
+  } catch (e) {
+    console.error("upsertItemsToCloud failed:", e);
+    return false;
+  }
+}
+
+let screenBeforeMigrateItems = "calc";
+
+async function migrateLocalItemsToCloud() {
+  document.getElementById("hamburger-drawer").classList.remove("show");
+  document.getElementById("hamburger-backdrop").classList.remove("show");
+  const localItems = await getItemsLocalLegacy();
+  if (localItems.length === 0) {
+    showToast("No local items to migrate.", "error");
+    return;
+  }
+  showConfirm(
+    "Migrate " + localItems.length + " item" + (localItems.length === 1 ? "" : "s") + " (and their photos) to the cloud? This only adds/updates \u2014 it never deletes anything already in the cloud, so it's safe to run from multiple devices.",
+    async function() {
+      showToast("Migrating " + localItems.length + " items\u2026", "success");
+      const ok = await upsertItemsToCloud(localItems);
+      if (ok) {
+        showToast("Migrated " + localItems.length + " items to the cloud. Use \u201cTest Cloud Items\u201d to verify.", "success");
+      } else {
+        showToast("Migration hit an error partway through \u2014 check the browser console, or try again.", "error");
+      }
+    }
+  );
+}
+
+function openTestCloudItemsScreen() {
+  document.getElementById("hamburger-drawer").classList.remove("show");
+  document.getElementById("hamburger-backdrop").classList.remove("show");
+  const activeScreen = document.querySelector(".screen.active");
+  if (activeScreen) screenBeforeMigrateItems = activeScreen.id.replace("screen-", "");
+  document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
+  document.getElementById("screen-test-cloud-items").classList.add("active");
+  document.getElementById("tabbar").style.display = "none";
+  renderTestCloudItemsScreen();
+}
+
+function closeTestCloudItemsScreen() {
+  document.getElementById("tabbar").style.display = "flex";
+  showScreen(screenBeforeMigrateItems);
+}
+
+async function renderTestCloudItemsScreen() {
+  const statusEl = document.getElementById("test-cloud-items-status");
+  const listEl = document.getElementById("test-cloud-items-list");
+  statusEl.textContent = "Reading directly from Firestore\u2026";
+  listEl.innerHTML = "";
+  try {
+    const cloudItems = await getItemsFromCloud();
+    if (cloudItems.length === 0) {
+      statusEl.innerHTML = '<span style="color:var(--rust);">No items found in the cloud yet. Run \u201cMigrate Items to Cloud\u201d first.</span>';
+      return;
+    }
+    statusEl.innerHTML = '<span style="color:var(--green); font-weight:600;">' + cloudItems.length + ' item' + (cloudItems.length === 1 ? "" : "s") + ' read directly from Firestore.</span>';
+    listEl.innerHTML = cloudItems.map(function(it) {
+      const photoHtml = it.photo
+        ? '<img src="' + it.photo + '" alt="" style="width:44px; height:44px; object-fit:cover; border-radius:8px; flex-shrink:0;">'
+        : '<span style="width:44px; height:44px; border-radius:8px; background:var(--border); display:flex; align-items:center; justify-content:center; flex-shrink:0;">&#128247;</span>';
+      return '<div style="display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1.5px solid var(--border);">' +
+        photoHtml +
+        '<div style="flex:1; min-width:0;">' +
+          '<div style="font-weight:800; color:var(--navy); font-size:14px;">' + escapeHtml(it.itemNumber || it.designNumber || "(no item #)") + '</div>' +
+          '<div style="font-size:12px; color:var(--terracotta-dark);">' + escapeHtml(it.designName || "") + '</div>' +
+        '</div>' +
+      '</div>';
+    }).join("");
+  } catch (e) {
+    statusEl.innerHTML = '<span style="color:var(--rust);">Could not read from Firestore: ' + escapeHtml(e.message || "unknown error") + '</span>';
+  }
 }
 
 async function getNextItemNumber() {
@@ -8606,6 +9001,55 @@ async function confirmAddToAlbum() {
   document.getElementById("add-album-banner").classList.remove("show");
   showToast("Added to album.", "success");
   addAlbumPhotoContext = null;
+  renderPhotoGallery();
+}
+
+// Tags an existing gallery photo (quote, supplier, or session photo) to a
+// meeting after the fact -- mirrors Add to Album's pattern exactly, using
+// the same getRecordsForStorageKey/saveRecordsForStorageKey funnel, so it
+// automatically goes through the cloud-backed quote/session storage where
+// applicable rather than needing its own separate storage logic.
+let addMeetingPhotoContext = null;
+
+async function startAddGalleryPhotoToMeeting() {
+  const p = galleryPhotos[galleryLightboxIndex];
+  if (!p) return;
+
+  const meetings = (await getMeetings()).filter(function(m) { return m.status === "active"; });
+  if (meetings.length === 0) {
+    showToast("No active meetings. Create one in Meetings first.", "error");
+    return;
+  }
+
+  addMeetingPhotoContext = p;
+  const select = document.getElementById("add-meeting-target");
+  select.innerHTML = meetings.map(function(m) {
+    return '<option value="' + m.id + '">' + escapeHtml(m.name || "(untitled meeting)") + '</option>';
+  }).join("");
+  document.getElementById("add-meeting-banner").classList.add("show");
+}
+
+function cancelAddToMeeting() {
+  document.getElementById("add-meeting-banner").classList.remove("show");
+  addMeetingPhotoContext = null;
+}
+
+async function confirmAddToMeeting() {
+  if (!addMeetingPhotoContext) return;
+  const meetingId = document.getElementById("add-meeting-target").value;
+  if (!meetingId) return;
+
+  const storageKey = photoStorageKey(addMeetingPhotoContext.sourceType);
+  const list = await getRecordsForStorageKey(storageKey);
+  const entry = list.find(function(e) { return e.id === addMeetingPhotoContext.sourceId; });
+  if (entry) {
+    entry.meetingId = meetingId;
+    await saveRecordsForStorageKey(storageKey, list);
+  }
+
+  document.getElementById("add-meeting-banner").classList.remove("show");
+  showToast("Added to meeting.", "success");
+  addMeetingPhotoContext = null;
   renderPhotoGallery();
 }
 
@@ -12727,6 +13171,56 @@ async function shareMockup() {
     try { await navigator.share({ files: [file], title: "NexTex mockup" }); } catch (e) { /* cancelled */ }
   } else {
     downloadMockup();
+  }
+}
+
+function mockupBlobToDataUrl(blob) {
+  return new Promise(function(resolve, reject) {
+    const reader = new FileReader();
+    reader.onload = function() { resolve(reader.result); };
+    reader.onerror = function() { reject(new Error("Could not read the generated mockup.")); };
+    reader.readAsDataURL(blob);
+  });
+}
+
+// Saves the current mockup result into Photo Gallery as a real session
+// photo, then jumps straight into the Gallery's own photo viewer for it --
+// which already has Download / Add to Album / Go to Meeting / Initiate
+// Supplier Quote / Delete, all fully working, without duplicating any of
+// that here. Gallery photos are cloud-backed, so this is also how a
+// mockup actually gets saved anywhere persistent, rather than only ever
+// existing as a one-time download.
+async function addMockupToGallery() {
+  if (!mockupResultBlob) return;
+  const btn = document.getElementById("mockup-add-gallery-btn");
+  btn.disabled = true;
+  const originalLabel = btn.textContent;
+  btn.textContent = "Adding\u2026";
+  try {
+    const dataUrl = await mockupBlobToDataUrl(mockupResultBlob);
+    const newId = "photo_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
+    const photos = await getSessionPhotos();
+    photos.push({ id: newId, photo: dataUrl, timestamp: Date.now(), meetingId: null, sourcingId: null, albumIds: [] });
+    const ok = await saveSessionPhotos(photos);
+    if (!ok) {
+      showToast("Could not add this to the gallery \u2014 try again.", "error");
+      return;
+    }
+    showToast("Added to gallery.", "success");
+
+    // Jump into the gallery, showing every photo (not last-used filters),
+    // and open straight to the one just added.
+    document.getElementById("gallery-filter-customer").value = "";
+    document.getElementById("gallery-filter-supplier").value = "";
+    document.getElementById("gallery-filter-category").value = "";
+    await openPhotoGallery();
+    const idx = galleryPhotos.findIndex(function(p) { return p.sourceType === "session" && p.sourceId === newId; });
+    if (idx !== -1) openGalleryLightbox(idx);
+  } catch (e) {
+    showToast(e && e.message ? e.message : "Could not add this to the gallery.", "error");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalLabel;
   }
 }
 
