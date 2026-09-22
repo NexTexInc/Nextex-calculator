@@ -1527,6 +1527,7 @@
       <button type="button" class="hamburger-submenu-item" onclick="migrateLocalGalleryToCloud()">Migrate Gallery to Cloud</button>
       <button type="button" class="hamburger-submenu-item" onclick="migrateLocalItemsToCloud()">Migrate Items to Cloud</button>
       <button type="button" class="hamburger-submenu-item" onclick="migrateLocalAlbumsToCloud()">Migrate Albums to Cloud</button>
+      <button type="button" class="hamburger-submenu-item" onclick="migrateLocalMockupSettingsToCloud()">Push Mockup Settings to Cloud</button>
       <button type="button" class="hamburger-submenu-item" onclick="openTestPhotoScreen()">Test Photo Storage</button>
       <button type="button" class="hamburger-submenu-item" onclick="openTestCloudQuotesScreen()">Test Cloud Quotes</button>
       <button type="button" class="hamburger-submenu-item" onclick="openTestCloudGalleryScreen()">Test Cloud Gallery</button>
@@ -13158,9 +13159,63 @@ let mockupResultUrl = null;
 let mockupBusy = false;
 let mockupTimer = null;
 
-async function getMockupSettings() {
+// Kept for the migration tool and as an emergency reference -- no longer
+// used by the live app once mockup settings' cutover happens.
+async function getMockupSettingsLocalLegacy() {
   const raw = await storageGet("nextex_mockup_settings");
   try { return raw ? JSON.parse(raw) : {}; } catch (e) { return {}; }
+}
+
+// ---------------------------------------------------------------
+// LIVE mockup settings storage: Firestore, a single shared document
+// rather than a collection of many records -- there's only ever one
+// service URL/token for the whole team, not one per device. These
+// used to live in each device's own local storage, so two devices
+// could silently end up pointing at different URLs or tokens with no
+// way to tell -- exactly the kind of drift that makes mockups work on
+// one device and fail on another. Now every device reads and writes
+// the same document, so a save on any device updates it everywhere.
+// ---------------------------------------------------------------
+async function getMockupSettings() {
+  try {
+    const doc = await db.collection("settings").doc("mockup").get();
+    return doc.exists ? doc.data() : {};
+  } catch (e) {
+    console.error("getMockupSettings failed:", e);
+    return {};
+  }
+}
+
+async function upsertMockupSettingsToCloud(cfg) {
+  try {
+    await db.collection("settings").doc("mockup").set(cfg);
+    return true;
+  } catch (e) {
+    console.error("upsertMockupSettingsToCloud failed:", e);
+    return false;
+  }
+}
+
+async function migrateLocalMockupSettingsToCloud() {
+  document.getElementById("hamburger-drawer").classList.remove("show");
+  document.getElementById("hamburger-backdrop").classList.remove("show");
+  const local = await getMockupSettingsLocalLegacy();
+  if (!local.url && !local.token) {
+    showToast("No local mockup settings on this device to migrate.", "error");
+    return;
+  }
+  showConfirm(
+    "Push this device's mockup service URL and token to the cloud? This becomes the shared setting for every device \u2014 use this from whichever device has the correct URL/token.",
+    async function() {
+      const ok = await upsertMockupSettingsToCloud(local);
+      if (ok) {
+        showToast("Mockup settings pushed to the cloud for all devices.", "success");
+        loadMockupSettingsIntoForm();
+      } else {
+        showToast("Could not save to the cloud \u2014 check the browser console, or try again.", "error");
+      }
+    }
+  );
 }
 
 async function loadMockupSettingsIntoForm() {
@@ -13176,9 +13231,10 @@ async function saveMockupSettings() {
     showToast("The service URL must start with https://", "error");
     return;
   }
-  const ok = await storageSet("nextex_mockup_settings", JSON.stringify({ url: url, token: token }));
-  showToast(ok ? "Mockup settings saved." : "Could not save the settings.", ok ? "success" : "error");
+  const ok = await upsertMockupSettingsToCloud({ url: url, token: token });
+  showToast(ok ? "Mockup settings saved for all devices." : "Could not save the settings.", ok ? "success" : "error");
 }
+
 
 function toggleMockupSettings() {
   const panel = document.getElementById("mockup-settings-panel");
