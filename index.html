@@ -5170,17 +5170,50 @@ async function renderTestCloudQuotesScreen() {
       statusEl.innerHTML = '<span style="color:var(--rust);">No quotes found in the cloud yet. Run \u201cMigrate Quotes to Cloud\u201d first.</span>';
       return;
     }
-    statusEl.innerHTML = '<span style="color:var(--green); font-weight:600;">' + cloudQuotes.length + ' quote' + (cloudQuotes.length === 1 ? "" : "s") + ' read directly from Firestore.</span>';
-    listEl.innerHTML = cloudQuotes.map(function(q) {
+
+    // Possible-duplicate detection: same item # + vendor showing up more
+    // than once means either the same quote synced normally (fine, this
+    // shouldn't happen since same ID overwrites) or it was re-entered
+    // separately on two devices and got two different IDs (a real
+    // duplicate). This only flags for your review -- nothing is changed
+    // or deleted automatically.
+    const groups = {};
+    cloudQuotes.forEach(function(q) {
+      const key = (q.item || "").trim().toLowerCase() + "||" + (q.vendor || "").trim().toLowerCase();
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(q);
+    });
+    const dupGroups = Object.values(groups).filter(function(g) { return g.length > 1 && (g[0].item || "").trim() !== ""; });
+    const dupCount = dupGroups.reduce(function(sum, g) { return sum + g.length; }, 0);
+
+    let statusHtml = '<span style="color:var(--green); font-weight:600;">' + cloudQuotes.length + ' quote' + (cloudQuotes.length === 1 ? "" : "s") + ' read directly from Firestore.</span>';
+    if (dupGroups.length > 0) {
+      statusHtml += '<br><span style="color:var(--rust); font-weight:600;">' + dupGroups.length + ' possible duplicate item#/vendor pair' + (dupGroups.length === 1 ? "" : "s") + ' (' + dupCount + ' quotes total) \u2014 flagged below in amber. Review before relying on this as your live list.</span>';
+    } else {
+      statusHtml += '<br><span style="color:var(--text-secondary);">No possible duplicates found (by matching item # + vendor).</span>';
+    }
+    statusEl.innerHTML = statusHtml;
+
+    // Sort so flagged duplicate groups surface first for review.
+    const dupIds = new Set(dupGroups.flat().map(function(q) { return q.id; }));
+    const sorted = cloudQuotes.slice().sort(function(a, b) {
+      const aDup = dupIds.has(a.id) ? 0 : 1;
+      const bDup = dupIds.has(b.id) ? 0 : 1;
+      return aDup - bDup;
+    });
+
+    listEl.innerHTML = sorted.map(function(q) {
+      const isDup = dupIds.has(q.id);
       const photoHtml = q.photo
         ? '<img src="' + q.photo + '" alt="" style="width:44px; height:44px; object-fit:cover; border-radius:8px; flex-shrink:0;">'
         : '<span style="width:44px; height:44px; border-radius:8px; background:var(--border); display:flex; align-items:center; justify-content:center; flex-shrink:0;">&#128247;</span>';
       const priceText = (q.prices && q.prices[0]) ? fmt(q.prices[0].usd) : "";
-      return '<div style="display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1.5px solid var(--border);">' +
+      return '<div style="display:flex; align-items:center; gap:10px; padding:10px 8px; border-bottom:1.5px solid var(--border);' + (isDup ? ' background:var(--pair-bg); border-radius:8px;' : '') + '">' +
         photoHtml +
         '<div style="flex:1; min-width:0;">' +
-          '<div style="font-weight:800; color:var(--navy); font-size:14px;">' + escapeHtml(q.item || "(no item #)") + '</div>' +
+          '<div style="font-weight:800; color:var(--navy); font-size:14px;">' + escapeHtml(q.item || "(no item #)") + (isDup ? ' <span style="font-size:10px; font-weight:700; color:var(--rust);">POSSIBLE DUPLICATE</span>' : '') + '</div>' +
           '<div style="font-size:12px; color:var(--terracotta-dark);">' + escapeHtml(q.vendor || "") + '</div>' +
+          '<div style="font-size:10px; color:var(--text-secondary); word-break:break-all;">id: ' + escapeHtml(q.id) + '</div>' +
         '</div>' +
         '<div style="font-weight:800; color:var(--navy); font-size:14px; flex-shrink:0;">' + escapeHtml(priceText) + '</div>' +
       '</div>';
