@@ -1526,10 +1526,12 @@
       <button type="button" class="hamburger-submenu-item" onclick="migrateLocalQuotesToCloud()">Migrate Quotes to Cloud</button>
       <button type="button" class="hamburger-submenu-item" onclick="migrateLocalGalleryToCloud()">Migrate Gallery to Cloud</button>
       <button type="button" class="hamburger-submenu-item" onclick="migrateLocalItemsToCloud()">Migrate Items to Cloud</button>
+      <button type="button" class="hamburger-submenu-item" onclick="migrateLocalAlbumsToCloud()">Migrate Albums to Cloud</button>
       <button type="button" class="hamburger-submenu-item" onclick="openTestPhotoScreen()">Test Photo Storage</button>
       <button type="button" class="hamburger-submenu-item" onclick="openTestCloudQuotesScreen()">Test Cloud Quotes</button>
       <button type="button" class="hamburger-submenu-item" onclick="openTestCloudGalleryScreen()">Test Cloud Gallery</button>
       <button type="button" class="hamburger-submenu-item" onclick="openTestCloudItemsScreen()">Test Cloud Items</button>
+      <button type="button" class="hamburger-submenu-item" onclick="openTestCloudAlbumsScreen()">Test Cloud Albums</button>
       <button type="button" class="hamburger-submenu-item" onclick="runStorageDiagnostics()">Storage Check</button>
       <button type="button" class="hamburger-submenu-item" onclick="inspectQuotesStorage()">Inspect Quotes Storage</button>
       <button type="button" class="hamburger-submenu-item" onclick="exportFullBackup()">Export Backup</button>
@@ -3095,6 +3097,18 @@
       <div class="field-hint" style="margin-bottom:14px;">Read-only. Reads directly from Firestore's gallery photos -- separate from your real Photo Gallery, which still runs on local storage until the actual cutover happens.</div>
       <div id="test-cloud-gallery-status" class="field-hint" style="margin-bottom:10px;"></div>
       <div id="test-cloud-gallery-grid" class="photo-gallery-grid"></div>
+    </div>
+  </div>
+
+  <div class="screen" id="screen-test-cloud-albums">
+    <div class="content">
+      <div class="cq-back-header">
+        <button type="button" class="cq-back-btn" onclick="closeTestCloudAlbumsScreen()">&#8592; Back</button>
+        <span class="section-label" style="margin:0;">Test Cloud Albums</span>
+      </div>
+      <div class="field-hint" style="margin-bottom:14px;">Read-only. Reads directly from Firestore's albums collection.</div>
+      <div id="test-cloud-albums-status" class="field-hint" style="margin-bottom:10px;"></div>
+      <div id="test-cloud-albums-list"></div>
     </div>
   </div>
 
@@ -8354,13 +8368,153 @@ let gallerySelectMode = false;
 let selectedPhotoIndices = new Set();
 let currentGalleryAlbumFilter = null; // null = all photos, else an album id
 
-async function getAlbums() {
+// Kept for the migration tool and as an emergency reference -- no longer
+// used by the live app once Albums' cutover happens.
+async function getAlbumsLocalLegacy() {
   const raw = await storageGet("nextex_albums");
   try { return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
 }
 
-async function saveAlbums(albums) {
+async function saveAlbumsLocalLegacy(albums) {
   await storageSet("nextex_albums", JSON.stringify(albums));
+}
+
+// ---------------------------------------------------------------
+// LIVE Albums storage: Firestore. Same concurrency-safe pattern as
+// quotes/gallery/items -- saveAlbums() only ever deletes an id this
+// device actually saw in its own last read and then dropped, never
+// something it never loaded. Album records carry no photo/Storage
+// field (membership lives on the photo documents via albumIds), so
+// this is a plain Firestore collection with no upload step.
+// ---------------------------------------------------------------
+let lastLoadedAlbumIds = null;
+
+async function getAlbums() {
+  const snapshot = await db.collection("albums").get();
+  const result = snapshot.docs.map(function(doc) {
+    return Object.assign({ id: doc.id }, doc.data());
+  });
+  lastLoadedAlbumIds = new Set(result.map(function(a) { return a.id; }));
+  return result;
+}
+
+async function saveAlbums(albums) {
+  try {
+    const newIds = new Set(albums.map(function(a) { return a.id; }));
+    const idsToDelete = [];
+    if (lastLoadedAlbumIds) {
+      lastLoadedAlbumIds.forEach(function(id) {
+        if (!newIds.has(id)) idsToDelete.push(id);
+      });
+    }
+
+    const ops = albums.map(function(a) {
+      const data = Object.assign({}, a);
+      delete data.id;
+      return { type: "set", id: a.id, data: data };
+    }).concat(idsToDelete.map(function(id) { return { type: "delete", id: id }; }));
+
+    for (let i = 0; i < ops.length; i += 400) {
+      const batch = db.batch();
+      ops.slice(i, i + 400).forEach(function(op) {
+        const ref = db.collection("albums").doc(op.id);
+        if (op.type === "set") batch.set(ref, op.data);
+        else batch.delete(ref);
+      });
+      await batch.commit();
+    }
+    lastLoadedAlbumIds = newIds;
+    return true;
+  } catch (e) {
+    console.error("saveAlbums failed:", e);
+    return false;
+  }
+}
+
+async function upsertAlbumsToCloud(albums) {
+  try {
+    const ops = albums.map(function(a) {
+      const data = Object.assign({}, a);
+      delete data.id;
+      return { id: a.id, data: data };
+    });
+    for (let i = 0; i < ops.length; i += 400) {
+      const batch = db.batch();
+      ops.slice(i, i + 400).forEach(function(op) {
+        batch.set(db.collection("albums").doc(op.id), op.data);
+      });
+      await batch.commit();
+    }
+    return true;
+  } catch (e) {
+    console.error("upsertAlbumsToCloud failed:", e);
+    return false;
+  }
+}
+
+let screenBeforeMigrateAlbums = "calc";
+
+async function migrateLocalAlbumsToCloud() {
+  document.getElementById("hamburger-drawer").classList.remove("show");
+  document.getElementById("hamburger-backdrop").classList.remove("show");
+  const localAlbums = await getAlbumsLocalLegacy();
+  if (localAlbums.length === 0) {
+    showToast("No local albums to migrate.", "error");
+    return;
+  }
+  showConfirm(
+    "Migrate " + localAlbums.length + " album" + (localAlbums.length === 1 ? "" : "s") + " to the cloud? This only adds/updates \u2014 it never deletes anything already in the cloud, so it's safe to run from multiple devices.",
+    async function() {
+      showToast("Migrating " + localAlbums.length + " albums\u2026", "success");
+      const ok = await upsertAlbumsToCloud(localAlbums);
+      if (ok) {
+        showToast("Migrated " + localAlbums.length + " albums to the cloud. Use \u201cTest Cloud Albums\u201d to verify.", "success");
+      } else {
+        showToast("Migration hit an error partway through \u2014 check the browser console, or try again.", "error");
+      }
+    }
+  );
+}
+
+function openTestCloudAlbumsScreen() {
+  document.getElementById("hamburger-drawer").classList.remove("show");
+  document.getElementById("hamburger-backdrop").classList.remove("show");
+  const activeScreen = document.querySelector(".screen.active");
+  if (activeScreen) screenBeforeMigrateAlbums = activeScreen.id.replace("screen-", "");
+  document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
+  document.getElementById("screen-test-cloud-albums").classList.add("active");
+  document.getElementById("tabbar").style.display = "none";
+  renderTestCloudAlbumsScreen();
+}
+
+function closeTestCloudAlbumsScreen() {
+  document.getElementById("tabbar").style.display = "flex";
+  showScreen(screenBeforeMigrateAlbums);
+}
+
+async function renderTestCloudAlbumsScreen() {
+  const statusEl = document.getElementById("test-cloud-albums-status");
+  const listEl = document.getElementById("test-cloud-albums-list");
+  statusEl.textContent = "Reading directly from Firestore\u2026";
+  listEl.innerHTML = "";
+  try {
+    const cloudAlbums = await getAlbums();
+    if (cloudAlbums.length === 0) {
+      statusEl.innerHTML = '<span style="color:var(--rust);">No albums found in the cloud yet. Run \u201cMigrate Albums to Cloud\u201d first.</span>';
+      return;
+    }
+    statusEl.innerHTML = '<span style="color:var(--green); font-weight:600;">' + cloudAlbums.length + ' album' + (cloudAlbums.length === 1 ? "" : "s") + ' read directly from Firestore.</span>';
+    listEl.innerHTML = cloudAlbums.map(function(a) {
+      return '<div style="display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1.5px solid var(--border);">' +
+        '<div style="flex:1; min-width:0;">' +
+          '<div style="font-weight:800; color:var(--navy); font-size:14px;">' + escapeHtml(a.name || "(untitled album)") + '</div>' +
+          '<div style="font-size:12px; color:var(--terracotta-dark);">' + escapeHtml(a.createdDate || "") + '</div>' +
+        '</div>' +
+      '</div>';
+    }).join("");
+  } catch (e) {
+    statusEl.innerHTML = '<span style="color:var(--rust);">Could not read from Firestore: ' + escapeHtml(e.message || "unknown error") + '</span>';
+  }
 }
 
 // Routes to the correct getter/setter for a given storage key -- quotes
