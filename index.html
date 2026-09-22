@@ -5044,6 +5044,44 @@ async function getQuotesFromCloud() {
 // that's no longer in the list). Photos are uploaded to Storage as part
 // of this, so the Firestore document itself stays small regardless of
 // photo size.
+// Additive-only: upserts every quote in the list, but never deletes
+// anything in Firestore that isn't in the list. This is what migration
+// uses -- each device's local storage is its own separate, possibly
+// incomplete copy, so treating a shorter list as "the whole truth" and
+// deleting the difference (which is what saveQuotesToCloud below
+// correctly does for the live app, once there's one shared dataset)
+// would destroy other devices' already-migrated data. Safe to run from
+// as many devices as you want, in any order.
+async function upsertQuotesToCloud(list) {
+  try {
+    const ops = [];
+    for (const q of list) {
+      const data = Object.assign({}, q);
+      delete data.id;
+      data.photo = await uploadQuotePhotoToCloud(q.id, q.photo);
+      ops.push({ id: q.id, data: data });
+    }
+    for (let i = 0; i < ops.length; i += 400) {
+      const batch = db.batch();
+      ops.slice(i, i + 400).forEach(function(op) {
+        batch.set(db.collection("quotes").doc(op.id), op.data);
+      });
+      await batch.commit();
+    }
+    return true;
+  } catch (e) {
+    console.error("upsertQuotesToCloud failed:", e);
+    return false;
+  }
+}
+
+// Mirrors saveQuotes()'s contract exactly: pass the FULL list, it syncs
+// Firestore to match (adds/updates changed quotes, deletes any quote
+// that's no longer in the list). Correct once the app has fully cut over
+// to one shared dataset -- NOT what migration should use, since a single
+// device's local list is only ever a partial view. Photos are uploaded
+// to Storage as part of this, so the Firestore document itself stays
+// small regardless of photo size.
 async function saveQuotesToCloud(list) {
   try {
     const snapshot = await db.collection("quotes").get();
@@ -5092,10 +5130,10 @@ async function migrateLocalQuotesToCloud() {
     return;
   }
   showConfirm(
-    "Migrate " + localQuotes.length + " quote" + (localQuotes.length === 1 ? "" : "s") + " (and their photos) to the cloud? This only copies them -- nothing local is deleted or changed. Running it again later won't create duplicates, but it will re-upload photos, so there's no need to run it more than once unless new local quotes are added.",
+    "Migrate " + localQuotes.length + " quote" + (localQuotes.length === 1 ? "" : "s") + " (and their photos) to the cloud? This only adds/updates \u2014 it never deletes anything already in the cloud, so it's safe to run from multiple devices. Running it again later won't create duplicates, but it will re-upload photos, so there's no need to run it more than once per device unless new local quotes are added.",
     async function() {
       showToast("Migrating " + localQuotes.length + " quotes\u2026", "success");
-      const ok = await saveQuotesToCloud(localQuotes);
+      const ok = await upsertQuotesToCloud(localQuotes);
       if (ok) {
         showToast("Migrated " + localQuotes.length + " quotes to the cloud. Use \u201cTest Cloud Quotes\u201d to verify.", "success");
       } else {
