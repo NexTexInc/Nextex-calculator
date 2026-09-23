@@ -2666,6 +2666,7 @@
       <p class="section-label" style="margin-top:20px;">Audio recording</p>
       <button type="button" class="audio-record-btn" id="meeting-record-btn" onclick="toggleAudioRecording('meeting')">&#9679; Start Recording</button>
       <div class="audio-timer" id="meeting-audio-timer" style="display:none;">00:00</div>
+      <div class="field-hint" id="meeting-live-transcript" style="display:none; margin-top:6px; max-height:80px; overflow-y:auto;"></div>
       <div id="meeting-audio-list"></div>
 
       <div class="field note-field">
@@ -2782,6 +2783,7 @@
       <p class="section-label" style="margin-top:20px;">Audio recording</p>
       <button type="button" class="audio-record-btn" id="sourcing-record-btn" onclick="toggleAudioRecording('sourcing')">&#9679; Start Recording</button>
       <div class="audio-timer" id="sourcing-audio-timer" style="display:none;">00:00</div>
+      <div class="field-hint" id="sourcing-live-transcript" style="display:none; margin-top:6px; max-height:80px; overflow-y:auto;"></div>
       <div id="sourcing-audio-list"></div>
 
       <div class="field note-field">
@@ -3076,9 +3078,23 @@
         <div class="field">
           <label for="mockup-service-token">Service token</label>
           <input type="password" id="mockup-service-token" placeholder="Paste the token" autocomplete="off">
-          <div class="field-hint">Saved on this device only.</div>
+          <div class="field-hint">Shared across every device on the team.</div>
         </div>
         <button type="button" class="scan-btn" style="width:100%; padding:11px 0;" onclick="saveMockupSettings()">Save settings</button>
+      </div>
+      <button type="button" class="chip" id="ai-summary-settings-toggle" onclick="toggleAiSummarySettings()" style="width:100%; margin-top:8px;">AI Summary service settings &#9662;</button>
+      <div id="ai-summary-settings-panel" style="display:none; margin-top:10px;">
+        <div class="field-hint" style="margin-bottom:10px;">Used to auto-summarize meeting/sourcing recordings into Notes. Can point at a new route on your existing mockup Worker, or a separate one &mdash; either works.</div>
+        <div class="field">
+          <label for="ai-summary-service-url">Service URL</label>
+          <input type="text" id="ai-summary-service-url" placeholder="https://your-summary-service.workers.dev" autocomplete="off" autocapitalize="off" spellcheck="false">
+        </div>
+        <div class="field">
+          <label for="ai-summary-service-token">Service token</label>
+          <input type="password" id="ai-summary-service-token" placeholder="Paste the token" autocomplete="off">
+          <div class="field-hint">Shared across every device on the team.</div>
+        </div>
+        <button type="button" class="scan-btn" style="width:100%; padding:11px 0;" onclick="saveAiSummarySettings()">Save settings</button>
       </div>
     </div>
   </div>
@@ -8070,9 +8086,21 @@ async function handleGalleryCameraCapture(event) {
 // current screen visit, then downloaded immediately on stop.
 // ---------------------------------------------------------------
 const audioRecorderState = {
-  meeting: { recorder: null, stream: null, chunks: [], startTime: null, timerInterval: null, recordings: [] },
-  sourcing: { recorder: null, stream: null, chunks: [], startTime: null, timerInterval: null, recordings: [] }
+  meeting: { recorder: null, stream: null, chunks: [], startTime: null, timerInterval: null, recordings: [], recognition: null, transcriptFinal: "", stoppingDeliberately: false },
+  sourcing: { recorder: null, stream: null, chunks: [], startTime: null, timerInterval: null, recordings: [], recognition: null, transcriptFinal: "", stoppingDeliberately: false }
 };
+
+// Web Speech API (SpeechRecognition) is a free, built-in browser feature --
+// no API key, no external service, works entirely through Chrome's own
+// speech engine. It's live-only (it can't transcribe an existing audio
+// file), so it runs IN PARALLEL with the MediaRecorder capture: the audio
+// blob is still what gets downloaded, and the accumulating live text is
+// what gets saved into Notes when recording stops. Not every browser
+// supports it (Firefox doesn't; Safari support is inconsistent), so it's
+// feature-detected and the recording itself still works fine without it.
+function getSpeechRecognitionCtor() {
+  return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+}
 
 function resetAudioRecorderUI(context) {
   const state = audioRecorderState[context];
@@ -8081,6 +8109,8 @@ function resetAudioRecorderUI(context) {
   if (btn) { btn.textContent = "\u25CF Start Recording"; btn.classList.remove("recording"); }
   const timerEl = document.getElementById(context + "-audio-timer");
   if (timerEl) timerEl.style.display = "none";
+  const liveEl = document.getElementById(context + "-live-transcript");
+  if (liveEl) { liveEl.style.display = "none"; liveEl.textContent = ""; }
 }
 
 function resetAudioRecordingSession(context) {
@@ -8088,6 +8118,10 @@ function resetAudioRecordingSession(context) {
   if (state.recorder && state.recorder.state === "recording") {
     state.recorder.onstop = null; // don't auto-download a recording we're discarding on navigation
     state.recorder.stop();
+  }
+  if (state.recognition) {
+    state.stoppingDeliberately = true;
+    try { state.recognition.stop(); } catch (e) {}
   }
   if (state.stream) {
     state.stream.getTracks().forEach(function(t) { t.stop(); });
@@ -8097,6 +8131,8 @@ function resetAudioRecordingSession(context) {
   state.stream = null;
   state.chunks = [];
   state.recordings = [];
+  state.recognition = null;
+  state.transcriptFinal = "";
   const listEl = document.getElementById(context + "-audio-list");
   if (listEl) listEl.innerHTML = "";
 }
@@ -8108,6 +8144,138 @@ async function toggleAudioRecording(context) {
   } else {
     await startAudioRecording(context);
   }
+}
+
+function startLiveTranscription(context) {
+  const Ctor = getSpeechRecognitionCtor();
+  if (!Ctor) return; // not supported in this browser -- recording still works, just no live transcript
+  const state = audioRecorderState[context];
+  state.transcriptFinal = "";
+  state.stoppingDeliberately = false;
+
+  const liveEl = document.getElementById(context + "-live-transcript");
+  if (liveEl) { liveEl.style.display = "block"; liveEl.textContent = "Listening\u2026"; }
+
+  function attachAndStart() {
+    const recognition = new Ctor();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = navigator.language || "en-US";
+
+    recognition.onresult = function(event) {
+      let interim = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcriptPiece = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          state.transcriptFinal += transcriptPiece + " ";
+        } else {
+          interim += transcriptPiece;
+        }
+      }
+      if (liveEl) liveEl.textContent = (state.transcriptFinal + interim).trim() || "Listening\u2026";
+    };
+
+    recognition.onerror = function(e) {
+      // no-speech / aborted happen naturally during pauses and on our own
+      // deliberate stop -- not real failures, onend's restart logic (or
+      // the deliberate-stop flag) already handles both correctly.
+    };
+
+    recognition.onend = function() {
+      const stillRecording = state.recorder && state.recorder.state === "recording";
+      if (stillRecording && !state.stoppingDeliberately) {
+        // Chrome ends a recognition session after a period of silence even
+        // mid-recording -- restart it seamlessly so a longer meeting with
+        // natural pauses doesn't just quietly stop transcribing partway through.
+        attachAndStart();
+      }
+    };
+
+    try {
+      recognition.start();
+      state.recognition = recognition;
+    } catch (e) {
+      // already-started or similar transient error -- safe to ignore, the
+      // recording itself is unaffected either way
+    }
+  }
+
+  attachAndStart();
+}
+
+function stopLiveTranscription(context) {
+  const state = audioRecorderState[context];
+  if (!state.recognition) return null;
+  state.stoppingDeliberately = true;
+  try { state.recognition.stop(); } catch (e) {}
+  state.recognition = null;
+  const liveEl = document.getElementById(context + "-live-transcript");
+  if (liveEl) { liveEl.style.display = "none"; liveEl.textContent = ""; }
+  return state.transcriptFinal.trim();
+}
+
+// Sends the transcript to the configured AI Summary Worker and returns the
+// summary text. Mirrors generateMockup()'s conventions exactly (token
+// header name, timeout/abort handling, error classification) since it's
+// the same kind of call against the same kind of infrastructure.
+async function summarizeTranscript(transcript) {
+  const cfg = await getAiSummarySettings();
+  if (!cfg.url || !cfg.token) {
+    throw new Error("AI Summary service isn't configured yet. Add it in Mockup \u2192 AI Summary service settings.");
+  }
+  const controller = new AbortController();
+  const abortTimer = setTimeout(function() { controller.abort(); }, 45000);
+  try {
+    const res = await fetch(cfg.url, {
+      method: "POST",
+      headers: { "x-app-token": cfg.token, "Content-Type": "application/json" },
+      body: JSON.stringify({ transcript: transcript }),
+      signal: controller.signal
+    });
+    if (!res.ok) {
+      if (res.status === 401) throw new Error("The AI Summary service token is not right.");
+      const detail = await res.text().catch(function() { return ""; });
+      throw new Error("The AI Summary service returned an error (" + res.status + "). " + detail.slice(0, 140));
+    }
+    const data = await res.json();
+    return (data && data.summary) ? data.summary.trim() : "";
+  } finally {
+    clearTimeout(abortTimer);
+  }
+}
+
+// Automatically summarizes a finished recording's transcript and writes
+// the summary into Notes (replacing the raw transcript there, per how
+// this is meant to be used -- the summary is what's actually wanted day
+// to day). If summarization fails for any reason -- not configured,
+// network error, service error -- the raw transcript is used instead
+// with a clear note explaining why, so a failed summary never just loses
+// the recording's content outright.
+async function appendTranscriptToNotes(context, transcript, recordingLabel) {
+  if (!transcript) return;
+  const textarea = document.getElementById(context + "-detail-notes");
+  if (!textarea) return;
+  const liveEl = document.getElementById(context + "-live-transcript");
+  if (liveEl) { liveEl.style.display = "block"; liveEl.textContent = "Summarizing\u2026"; }
+
+  let heading = "\u2014\u2014\u2014 Summary (" + recordingLabel + ") \u2014\u2014\u2014";
+  let bodyText = transcript;
+  try {
+    const summary = await summarizeTranscript(transcript);
+    if (summary) {
+      bodyText = summary;
+    } else {
+      heading = "\u2014\u2014\u2014 Transcript (" + recordingLabel + ") \u2014 summary came back empty \u2014\u2014\u2014";
+    }
+  } catch (e) {
+    heading = "\u2014\u2014\u2014 Transcript (" + recordingLabel + ") \u2014 AI summary failed: " + (e.message || "unknown error") + " \u2014\u2014\u2014";
+  }
+
+  textarea.value = (textarea.value ? textarea.value.replace(/\s+$/, "") + "\n\n" : "") + heading + "\n" + bodyText;
+  if (context === "meeting") await saveMeetingDetailNotes();
+  else await saveSourcingDetailNotes();
+
+  if (liveEl) { liveEl.style.display = "none"; liveEl.textContent = ""; }
 }
 
 async function startAudioRecording(context) {
@@ -8130,14 +8298,18 @@ async function startAudioRecording(context) {
     state.recorder.onstop = function() {
       const blob = new Blob(state.chunks, { type: state.recorder.mimeType || "audio/webm" });
       const durationSec = Math.max(1, Math.round((Date.now() - state.startTime) / 1000));
-      state.recordings.push({ blob: blob, duration: durationSec, timestamp: new Date().toLocaleTimeString() });
+      const transcript = stopLiveTranscription(context);
+      const recordingLabel = "Recording " + (state.recordings.length + 1);
+      state.recordings.push({ blob: blob, duration: durationSec, timestamp: new Date().toLocaleTimeString(), transcript: transcript || "" });
       state.stream.getTracks().forEach(function(t) { t.stop(); });
       renderAudioRecordingsList(context);
       downloadAudioRecording(context, state.recordings.length - 1);
+      if (transcript) appendTranscriptToNotes(context, transcript, recordingLabel);
     };
 
     state.recorder.start();
     state.startTime = Date.now();
+    startLiveTranscription(context);
 
     const btn = document.getElementById(context + "-record-btn");
     btn.textContent = "\u25A0 Stop Recording";
@@ -8184,17 +8356,21 @@ function renderAudioRecordingsList(context) {
     container.innerHTML = "";
     return;
   }
+  const supportsLiveTranscription = !!getSpeechRecognitionCtor();
   container.innerHTML = state.recordings.map(function(r, i) {
     const mins = String(Math.floor(r.duration / 60)).padStart(2, "0");
     const secs = String(r.duration % 60).padStart(2, "0");
+    const transcriptNote = r.transcript ? ' &middot; <span style="color:var(--green);">Summarized to Notes</span>' : "";
     return '<div class="meeting-row">' +
       '<div class="meeting-row-info">' +
         '<div class="meeting-row-name">Recording ' + (i + 1) + '</div>' +
-        '<div class="meeting-row-sub">' + mins + ':' + secs + ' &middot; ' + escapeHtml(r.timestamp) + '</div>' +
+        '<div class="meeting-row-sub">' + mins + ':' + secs + ' &middot; ' + escapeHtml(r.timestamp) + transcriptNote + '</div>' +
       '</div>' +
       '<button type="button" class="cq-back-btn" onclick="downloadAudioRecording(\'' + context + '\', ' + i + ')">Download</button>' +
     '</div>';
-  }).join("") + '<div class="field-hint" style="margin-top:8px;">Recordings aren\u2019t saved permanently \u2014 download each one before leaving this screen. Drop the file into a Claude conversation afterward for a translated summary, then paste it into Notes.</div>';
+  }).join("") + '<div class="field-hint" style="margin-top:8px;">' + (supportsLiveTranscription
+    ? 'Each recording is auto-transcribed live, then summarized by AI straight into Notes below \u2014 give it a quick read-through, since neither speech recognition nor the summary is perfect, especially for product names. The audio itself isn\u2019t saved permanently, so download it too if you want the original.'
+    : 'This browser doesn\u2019t support live transcription, so recordings aren\u2019t saved permanently \u2014 download each one before leaving this screen.') + '</div>';
 }
 
 function downloadAudioRecording(context, index) {
@@ -13733,12 +13909,52 @@ async function saveMockupSettings() {
   showToast(ok ? "Mockup settings saved for all devices." : "Could not save the settings.", ok ? "success" : "error");
 }
 
-
 function toggleMockupSettings() {
   const panel = document.getElementById("mockup-settings-panel");
   const opening = panel.style.display === "none";
   panel.style.display = opening ? "block" : "none";
   document.getElementById("mockup-settings-toggle").innerHTML = "Mockup service settings " + (opening ? "&#9652;" : "&#9662;");
+}
+
+// AI Summary service -- same shared-document Firestore pattern as mockup
+// settings (one URL/token for the whole team, not per device).
+async function getAiSummarySettings() {
+  try {
+    const doc = await db.collection("settings").doc("aiSummary").get();
+    return doc.exists ? doc.data() : {};
+  } catch (e) {
+    console.error("getAiSummarySettings failed:", e);
+    return {};
+  }
+}
+
+async function loadAiSummarySettingsIntoForm() {
+  const cfg = await getAiSummarySettings();
+  document.getElementById("ai-summary-service-url").value = cfg.url || "";
+  document.getElementById("ai-summary-service-token").value = cfg.token || "";
+}
+
+async function saveAiSummarySettings() {
+  const url = document.getElementById("ai-summary-service-url").value.trim();
+  const token = document.getElementById("ai-summary-service-token").value.trim();
+  if (url && !/^https:\/\//i.test(url)) {
+    showToast("The service URL must start with https://", "error");
+    return;
+  }
+  try {
+    await db.collection("settings").doc("aiSummary").set({ url: url, token: token });
+    showToast("AI Summary settings saved for all devices.", "success");
+  } catch (e) {
+    console.error("saveAiSummarySettings failed:", e);
+    showToast("Could not save the settings.", "error");
+  }
+}
+
+function toggleAiSummarySettings() {
+  const panel = document.getElementById("ai-summary-settings-panel");
+  const opening = panel.style.display === "none";
+  panel.style.display = opening ? "block" : "none";
+  document.getElementById("ai-summary-settings-toggle").innerHTML = "AI Summary service settings " + (opening ? "&#9652;" : "&#9662;");
 }
 
 function setMockupStatus(message, isError) {
@@ -13758,6 +13974,7 @@ function openMockupScreen() {
   document.getElementById("tabbar").style.display = "none";
   document.getElementById("mockup-share-btn").style.display = (navigator.canShare ? "block" : "none");
   loadMockupSettingsIntoForm();
+  loadAiSummarySettingsIntoForm();
 }
 
 function closeMockupScreen() {
