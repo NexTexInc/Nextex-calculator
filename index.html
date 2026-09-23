@@ -4411,6 +4411,229 @@ function ensureHeic2AnyLoaded() {
   return heic2anyLibLoadPromise;
 }
 
+let docxLibLoadPromise = null;
+
+function ensureDocxLibLoaded() {
+  if (typeof window.docx !== "undefined") return Promise.resolve();
+  if (docxLibLoadPromise) return docxLibLoadPromise;
+  docxLibLoadPromise = new Promise(function(resolve, reject) {
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/docx@9.7.2/dist/index.iife.js";
+    script.onload = function() { resolve(); };
+    script.onerror = function() { reject(new Error("Could not load the Word document library")); };
+    document.head.appendChild(script);
+  });
+  return docxLibLoadPromise;
+}
+
+// Fetches ANY photo source used in this app (a data: URL from local
+// capture, or an https:// Firebase Storage URL for already-uploaded
+// photos) and returns its raw bytes plus natural pixel dimensions, so it
+// can be embedded directly into a generated Word document. A single
+// photo failing to fetch (a stale/broken Storage URL, e.g.) returns null
+// rather than throwing, so one bad photo doesn't take down the whole
+// export.
+async function fetchImageForDocx(url) {
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) return null;
+    const blob = await resp.blob();
+    const arrayBuf = await blob.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuf);
+    const dims = await new Promise(function(resolve) {
+      const img = new Image();
+      img.onload = function() { resolve({ width: img.naturalWidth, height: img.naturalHeight }); };
+      img.onerror = function() { resolve({ width: 0, height: 0 }); };
+      img.src = URL.createObjectURL(blob);
+    });
+    if (!dims.width || !dims.height) return null;
+    const mime = (blob.type || "").toLowerCase();
+    const type = mime.indexOf("png") !== -1 ? "png"
+      : mime.indexOf("gif") !== -1 ? "gif"
+      : mime.indexOf("bmp") !== -1 ? "bmp"
+      : "jpg"; // the app's own captured/compressed photos are jpeg by default
+    return { bytes: bytes, width: dims.width, height: dims.height, type: type };
+  } catch (e) {
+    console.error("fetchImageForDocx failed for", url, e);
+    return null;
+  }
+}
+
+// The AI summary comes back in a light markdown style (**bold** section
+// headers, "* " bullets) -- this turns that into real Word paragraphs and
+// bullet points instead of dumping the raw asterisks into the document.
+function parseInlineBoldRuns(text) {
+  const D = window.docx;
+  const parts = text.split(/(\*\*[^*]+\*\*)/g).filter(function(p) { return p.length > 0; });
+  if (parts.length === 0) return [new D.TextRun({ text: text })];
+  return parts.map(function(part) {
+    const m = part.match(/^\*\*([^*]+)\*\*$/);
+    return m ? new D.TextRun({ text: m[1], bold: true }) : new D.TextRun({ text: part });
+  });
+}
+
+function parseSummaryTextToDocxParagraphs(text) {
+  const D = window.docx;
+  const paragraphs = [];
+  (text || "").split("\n").forEach(function(rawLine) {
+    const line = rawLine.trim();
+    if (!line) {
+      paragraphs.push(new D.Paragraph({}));
+      return;
+    }
+    // This app's own "--- Summary (Transcript N) ---" style section marker
+    if (/^\u2014{3}.+\u2014{3}$/.test(line)) {
+      paragraphs.push(new D.Paragraph({
+        children: [new D.TextRun({ text: line, bold: true, color: "8B6F5C" })],
+        spacing: { before: 200, after: 100 }
+      }));
+      return;
+    }
+    // A whole line that's just "**Some Header:**"
+    const wholeBoldMatch = line.match(/^\*\*(.+?)\*\*:?\s*$/);
+    if (wholeBoldMatch) {
+      paragraphs.push(new D.Paragraph({
+        children: [new D.TextRun({ text: wholeBoldMatch[1] + (line.slice(-1) === ":" ? ":" : ""), bold: true })],
+        spacing: { before: 150, after: 60 }
+      }));
+      return;
+    }
+    const bulletMatch = line.match(/^[*-]\s+(.*)$/);
+    const isBullet = !!bulletMatch;
+    const contentText = isBullet ? bulletMatch[1] : line;
+    paragraphs.push(new D.Paragraph({
+      children: parseInlineBoldRuns(contentText),
+      bullet: isBullet ? { level: 0 } : undefined
+    }));
+  });
+  return paragraphs;
+}
+
+// Shared by both Meetings and Sourcing's "Download summary" -- builds a
+// real, properly formatted Word document (headings, tables, embedded
+// photos) rather than a plain text dump. Photos are fetched and embedded
+// one at a time; a single broken/stale photo URL shows as a small note
+// in the document instead of failing the whole export.
+async function buildSummaryDocxBlob(config) {
+  await ensureDocxLibLoaded();
+  const D = window.docx;
+  const children = [];
+
+  children.push(new D.Paragraph({ text: config.title, heading: D.HeadingLevel.HEADING_1 }));
+  children.push(new D.Paragraph({ text: config.name, heading: D.HeadingLevel.HEADING_2, spacing: { after: 150 } }));
+  config.metaLines.forEach(function(line) {
+    children.push(new D.Paragraph({ children: [new D.TextRun({ text: line })] }));
+  });
+  children.push(new D.Paragraph({}));
+
+  children.push(new D.Paragraph({ text: "Notes", heading: D.HeadingLevel.HEADING_2 }));
+  if (config.notes) {
+    config.notes.split("\n").forEach(function(l) {
+      children.push(new D.Paragraph({ children: [new D.TextRun({ text: l })] }));
+    });
+  } else {
+    children.push(new D.Paragraph({ children: [new D.TextRun({ text: "(none)", italics: true })] }));
+  }
+  children.push(new D.Paragraph({}));
+
+  children.push(new D.Paragraph({ text: "AI Transcript & Summary", heading: D.HeadingLevel.HEADING_2 }));
+  if (config.transcriptSummary) {
+    parseSummaryTextToDocxParagraphs(config.transcriptSummary).forEach(function(p) { children.push(p); });
+  } else {
+    children.push(new D.Paragraph({ children: [new D.TextRun({ text: "(none)", italics: true })] }));
+  }
+  children.push(new D.Paragraph({}));
+
+  if (config.rawTranscripts && config.rawTranscripts.length > 0) {
+    children.push(new D.Paragraph({ text: "Raw Transcript(s)", heading: D.HeadingLevel.HEADING_2 }));
+    config.rawTranscripts.forEach(function(r) {
+      children.push(new D.Paragraph({ children: [new D.TextRun({ text: r.label + ":", bold: true, size: 18 })] }));
+      children.push(new D.Paragraph({ children: [new D.TextRun({ text: r.text, size: 18, color: "666666" })] }));
+      children.push(new D.Paragraph({}));
+    });
+  }
+
+  children.push(new D.Paragraph({ text: config.quotesSectionTitle + " (" + config.quotes.length + ")", heading: D.HeadingLevel.HEADING_2 }));
+  if (config.quotes.length === 0) {
+    children.push(new D.Paragraph({ children: [new D.TextRun({ text: "(none)", italics: true })] }));
+  } else {
+    const headerRow = new D.TableRow({
+      children: ["Item", "Vendor", "Price"].map(function(h) {
+        return new D.TableCell({ children: [new D.Paragraph({ children: [new D.TextRun({ text: h, bold: true })] })] });
+      })
+    });
+    const rows = config.quotes.map(function(q) {
+      return new D.TableRow({
+        children: [q.item, q.vendor, q.priceLine].map(function(v) {
+          return new D.TableCell({ children: [new D.Paragraph(String(v))] });
+        })
+      });
+    });
+    children.push(new D.Table({ rows: [headerRow].concat(rows), width: { size: 100, type: D.WidthType.PERCENTAGE } }));
+  }
+  children.push(new D.Paragraph({}));
+
+  children.push(new D.Paragraph({ text: config.cartSectionTitle + " (" + config.cartItems.length + ")", heading: D.HeadingLevel.HEADING_2 }));
+  if (config.cartItems.length === 0) {
+    children.push(new D.Paragraph({ children: [new D.TextRun({ text: "(none)", italics: true })] }));
+  } else {
+    const headerRow2 = new D.TableRow({
+      children: ["Item", "Size", "Qty", "Unit Price", "Total"].map(function(h) {
+        return new D.TableCell({ children: [new D.Paragraph({ children: [new D.TextRun({ text: h, bold: true })] })] });
+      })
+    });
+    const rows2 = config.cartItems.map(function(c) {
+      return new D.TableRow({
+        children: [c.item, c.sizeLabel, String(c.qty), c.unitPrice, c.total].map(function(v) {
+          return new D.TableCell({ children: [new D.Paragraph(String(v))] });
+        })
+      });
+    });
+    children.push(new D.Table({ rows: [headerRow2].concat(rows2), width: { size: 100, type: D.WidthType.PERCENTAGE } }));
+  }
+  children.push(new D.Paragraph({}));
+
+  if (config.extraListSection) {
+    const items = config.extraListSection.items || [];
+    children.push(new D.Paragraph({ text: config.extraListSection.title + " (" + items.length + ")", heading: D.HeadingLevel.HEADING_2 }));
+    if (items.length === 0) {
+      children.push(new D.Paragraph({ children: [new D.TextRun({ text: "(none)", italics: true })] }));
+    } else {
+      items.forEach(function(item) {
+        children.push(new D.Paragraph({ children: [new D.TextRun({ text: item })], bullet: { level: 0 } }));
+      });
+    }
+    children.push(new D.Paragraph({}));
+  }
+
+  children.push(new D.Paragraph({ text: "Photos (" + config.photos.length + ")", heading: D.HeadingLevel.HEADING_2 }));
+  if (config.photos.length === 0) {
+    children.push(new D.Paragraph({ children: [new D.TextRun({ text: "(none)", italics: true })] }));
+  } else {
+    for (let i = 0; i < config.photos.length; i++) {
+      const photo = config.photos[i];
+      const fetched = await fetchImageForDocx(photo.url);
+      if (!fetched) {
+        children.push(new D.Paragraph({ children: [new D.TextRun({ text: "(could not load: " + (photo.caption || "photo") + ")", italics: true, color: "AA0000" })] }));
+        continue;
+      }
+      const maxWidth = 350;
+      const scale = Math.min(1, maxWidth / fetched.width);
+      const w = Math.round(fetched.width * scale);
+      const h = Math.round(fetched.height * scale);
+      children.push(new D.Paragraph({
+        children: [new D.ImageRun({ data: fetched.bytes, transformation: { width: w, height: h }, type: fetched.type })]
+      }));
+      if (photo.caption) {
+        children.push(new D.Paragraph({ children: [new D.TextRun({ text: photo.caption, italics: true, size: 18 })], spacing: { after: 200 } }));
+      }
+    }
+  }
+
+  const doc = new D.Document({ sections: [{ children: children }] });
+  return await D.Packer.toBlob(doc);
+}
+
 // iPhones share photos as HEIC by default, which most non-Safari mobile
 // browsers (Android Chrome included) can't decode in an <img> or canvas
 // at all -- the photo just silently fails to display, with no useful
@@ -5148,76 +5371,60 @@ async function downloadMeetingSummary() {
   let quotes = await getQuotes();
   const meetingQuotes = quotes.filter(function(q) { return q.meetingId === meeting.id; });
   const meetingCartItems = customerCart.filter(function(c) { return c.meetingId === meeting.id; });
-  const meetingSessionPhotosForDownload = (await getSessionPhotos()).filter(function(p) { return p.meetingId === meeting.id; });
-  const photoCount = meetingQuotes.filter(function(q) { return q.photo; }).length + meetingSessionPhotosForDownload.length;
-
+  const meetingSessionPhotos = (await getSessionPhotos()).filter(function(p) { return p.meetingId === meeting.id; });
   const catLabel = (meeting.categories || []).join(" + ") || "Not set";
 
-  let lines = [];
-  lines.push("MEETING SUMMARY");
-  lines.push("=".repeat(40));
-  lines.push(meeting.name);
-  lines.push("Customer: " + (meeting.customer || "Not set"));
-  lines.push("Category: " + catLabel);
-  lines.push("Status: " + (meeting.status === "active" ? "Active" : "Finalized (" + meeting.finalizedDate + ")"));
-  lines.push("Started: " + meeting.createdDate);
-  lines.push("");
-  lines.push("NOTES");
-  lines.push("-".repeat(40));
-  lines.push(meeting.notes || "(none)");
-  lines.push("");
-  lines.push("AI TRANSCRIPT & SUMMARY");
-  lines.push("-".repeat(40));
-  lines.push(meeting.transcriptNotes || "(none)");
-  lines.push("");
-  lines.push("RAW TRANSCRIPT(S) -- before AI summarization");
-  lines.push("-".repeat(40));
-  if (meeting.rawTranscripts && meeting.rawTranscripts.length > 0) {
-    meeting.rawTranscripts.forEach(function(r) {
-      lines.push(r.label + ":");
-      lines.push(r.text);
-      lines.push("");
-    });
-  } else {
-    lines.push("(none)");
-  }
-  lines.push("");
-  lines.push("QUOTES IN THIS MEETING (" + meetingQuotes.length + ")");
-  lines.push("-".repeat(40));
-  if (meetingQuotes.length === 0) {
-    lines.push("(none)");
-  } else {
-    meetingQuotes.forEach(function(q, i) {
-      const priceLine = (q.prices && q.prices[0]) ? fmt(q.prices[0].msrp) + " MSRP (50\"W x 84\"L)" : "No pricing yet";
-      lines.push((i + 1) + ". " + (q.item || "(no item #)") + " \u2014 " + (q.vendor || "(no vendor)"));
-      lines.push("   " + priceLine);
-    });
-  }
-  lines.push("");
-  lines.push("CUSTOMER QUOTE ITEMS FROM THIS MEETING (" + meetingCartItems.length + ")");
-  lines.push("-".repeat(40));
-  if (meetingCartItems.length === 0) {
-    lines.push("(none)");
-  } else {
-    meetingCartItems.forEach(function(c, i) {
-      lines.push((i + 1) + ". " + c.item + " \u2014 " + c.sizeLabel + " \u2014 Qty " + c.qty + " \u00d7 " + fmt(c.sellPrice) + " = " + fmt(c.sellPrice * c.qty));
-    });
-  }
-  lines.push("");
-  lines.push("PHOTOS: " + photoCount + " photo" + (photoCount === 1 ? "" : "s") + " attached across the quotes above.");
+  const photos = meetingQuotes.filter(function(q) { return q.photo; }).map(function(q) {
+    return { url: q.photo, caption: (q.item || "(no item #)") + " \u2014 " + (q.vendor || "(no vendor)") };
+  }).concat(meetingSessionPhotos.map(function(p) {
+    return { url: p.photo, caption: "Gallery photo \u2014 " + (p.timestamp || "") };
+  }));
 
-  const blob = new Blob([lines.join("\n")], { type: "text/plain" });
-  const url = URL.createObjectURL(blob);
-  const safeName = meeting.name.replace(/[^a-z0-9\-_]/gi, "_");
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = safeName + "_summary.txt";
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-  showToast("Downloading meeting summary\u2026", "success");
+  showToast("Building Word document\u2026", "success");
+  try {
+    const blob = await buildSummaryDocxBlob({
+      title: "MEETING SUMMARY",
+      name: meeting.name,
+      metaLines: [
+        "Customer: " + (meeting.customer || "Not set"),
+        "Category: " + catLabel,
+        "Status: " + (meeting.status === "active" ? "Active" : "Finalized (" + meeting.finalizedDate + ")"),
+        "Started: " + meeting.createdDate
+      ],
+      notes: meeting.notes,
+      transcriptSummary: meeting.transcriptNotes,
+      rawTranscripts: meeting.rawTranscripts,
+      quotesSectionTitle: "Quotes in This Meeting",
+      quotes: meetingQuotes.map(function(q) {
+        return {
+          item: q.item || "(no item #)",
+          vendor: q.vendor || "(no vendor)",
+          priceLine: (q.prices && q.prices[0]) ? fmt(q.prices[0].msrp) + " MSRP (50\"W x 84\"L)" : "No pricing yet"
+        };
+      }),
+      cartSectionTitle: "Customer Quote Items From This Meeting",
+      cartItems: meetingCartItems.map(function(c) {
+        return { item: c.item, sizeLabel: c.sizeLabel, qty: c.qty, unitPrice: fmt(c.sellPrice), total: fmt(c.sellPrice * c.qty) };
+      }),
+      photos: photos
+    });
+
+    const url = URL.createObjectURL(blob);
+    const safeName = meeting.name.replace(/[^a-z0-9\-_]/gi, "_");
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = safeName + "_summary.docx";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast("Downloaded meeting summary.", "success");
+  } catch (e) {
+    console.error("downloadMeetingSummary failed:", e);
+    showToast("Could not build the Word document \u2014 check your connection and try again.", "error");
+  }
 }
+
 
 // ---------------------------------------------------------------
 // Session photos -- lightweight photo capture directly inside a
@@ -8882,74 +9089,57 @@ async function downloadSourcingSummary() {
   try { suppliers = rawSuppliers ? JSON.parse(rawSuppliers) : []; } catch (e) { suppliers = []; }
   const sourcingSuppliers = suppliers.filter(function(s) { return s.sourcingId === sourcing.id; });
 
-  const sourcingSessionPhotosForDownload = (await getSessionPhotos()).filter(function(p) { return p.sourcingId === sourcing.id; });
-  const photoCount = sourcingQuotes.filter(function(q) { return q.photo; }).length + sourcingSessionPhotosForDownload.length;
+  const sourcingSessionPhotos = (await getSessionPhotos()).filter(function(p) { return p.sourcingId === sourcing.id; });
   const catLabel = (sourcing.categories || []).join(" + ") || "Not set";
 
-  let lines = [];
-  lines.push("SOURCING SUMMARY");
-  lines.push("=".repeat(40));
-  lines.push(sourcing.name);
-  lines.push(sourcingEventLabel(sourcing));
-  lines.push("Category: " + catLabel);
-  lines.push("Status: " + (sourcing.status === "active" ? "Active" : "Finalized (" + sourcing.finalizedDate + ")"));
-  lines.push("Started: " + sourcing.createdDate);
-  lines.push("");
-  lines.push("NOTES");
-  lines.push("-".repeat(40));
-  lines.push(sourcing.notes || "(none)");
-  lines.push("");
-  lines.push("AI TRANSCRIPT & SUMMARY");
-  lines.push("-".repeat(40));
-  lines.push(sourcing.transcriptNotes || "(none)");
-  lines.push("");
-  lines.push("RAW TRANSCRIPT(S) -- before AI summarization");
-  lines.push("-".repeat(40));
-  if (sourcing.rawTranscripts && sourcing.rawTranscripts.length > 0) {
-    sourcing.rawTranscripts.forEach(function(r) {
-      lines.push(r.label + ":");
-      lines.push(r.text);
-      lines.push("");
-    });
-  } else {
-    lines.push("(none)");
-  }
-  lines.push("");
-  lines.push("QUOTES FROM THIS SOURCING (" + sourcingQuotes.length + ")");
-  lines.push("-".repeat(40));
-  if (sourcingQuotes.length === 0) {
-    lines.push("(none)");
-  } else {
-    sourcingQuotes.forEach(function(q, i) {
-      const priceLine = (q.prices && q.prices[0]) ? fmt(q.prices[0].msrp) + " MSRP (50\"W x 84\"L)" : "No pricing yet";
-      lines.push((i + 1) + ". " + (q.item || "(no item #)") + " \u2014 " + (q.vendor || "(no vendor)"));
-      lines.push("   " + priceLine);
-    });
-  }
-  lines.push("");
-  lines.push("NEW SUPPLIERS ADDED (" + sourcingSuppliers.length + ")");
-  lines.push("-".repeat(40));
-  if (sourcingSuppliers.length === 0) {
-    lines.push("(none)");
-  } else {
-    sourcingSuppliers.forEach(function(s, i) {
-      lines.push((i + 1) + ". " + s.name);
-    });
-  }
-  lines.push("");
-  lines.push("PHOTOS: " + photoCount + " photo" + (photoCount === 1 ? "" : "s") + " attached across the quotes above.");
+  const photos = sourcingQuotes.filter(function(q) { return q.photo; }).map(function(q) {
+    return { url: q.photo, caption: (q.item || "(no item #)") + " \u2014 " + (q.vendor || "(no vendor)") };
+  }).concat(sourcingSessionPhotos.map(function(p) {
+    return { url: p.photo, caption: "Gallery photo \u2014 " + (p.timestamp || "") };
+  }));
 
-  const blob = new Blob([lines.join("\n")], { type: "text/plain" });
-  const url = URL.createObjectURL(blob);
-  const safeName = sourcing.name.replace(/[^a-z0-9\-_]/gi, "_");
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = safeName + "_summary.txt";
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-  showToast("Downloading sourcing summary\u2026", "success");
+  showToast("Building Word document\u2026", "success");
+  try {
+    const blob = await buildSummaryDocxBlob({
+      title: "SOURCING SUMMARY",
+      name: sourcing.name,
+      metaLines: [
+        sourcingEventLabel(sourcing),
+        "Category: " + catLabel,
+        "Status: " + (sourcing.status === "active" ? "Active" : "Finalized (" + sourcing.finalizedDate + ")"),
+        "Started: " + sourcing.createdDate
+      ],
+      notes: sourcing.notes,
+      transcriptSummary: sourcing.transcriptNotes,
+      rawTranscripts: sourcing.rawTranscripts,
+      quotesSectionTitle: "Quotes From This Sourcing",
+      quotes: sourcingQuotes.map(function(q) {
+        return {
+          item: q.item || "(no item #)",
+          vendor: q.vendor || "(no vendor)",
+          priceLine: (q.prices && q.prices[0]) ? fmt(q.prices[0].msrp) + " MSRP (50\"W x 84\"L)" : "No pricing yet"
+        };
+      }),
+      cartSectionTitle: "Customer Quote Items From This Sourcing",
+      cartItems: [],
+      extraListSection: { title: "New Suppliers Added", items: sourcingSuppliers.map(function(s) { return s.name; }) },
+      photos: photos
+    });
+
+    const url = URL.createObjectURL(blob);
+    const safeName = sourcing.name.replace(/[^a-z0-9\-_]/gi, "_");
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = safeName + "_summary.docx";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast("Downloaded sourcing summary.", "success");
+  } catch (e) {
+    console.error("downloadSourcingSummary failed:", e);
+    showToast("Could not build the Word document \u2014 check your connection and try again.", "error");
+  }
 }
 
 let screenBeforeAlbumsHome = "calc";
