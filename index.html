@@ -1527,6 +1527,12 @@
       <button type="button" class="hamburger-submenu-item" onclick="migrateLocalGalleryToCloud()">Migrate Gallery to Cloud</button>
       <button type="button" class="hamburger-submenu-item" onclick="migrateLocalItemsToCloud()">Migrate Items to Cloud</button>
       <button type="button" class="hamburger-submenu-item" onclick="migrateLocalAlbumsToCloud()">Migrate Albums to Cloud</button>
+      <button type="button" class="hamburger-submenu-item" onclick="migrateLocalMeetingsToCloud()">Migrate Meetings to Cloud</button>
+      <button type="button" class="hamburger-submenu-item" onclick="migrateLocalSourcingToCloud()">Migrate Sourcing to Cloud</button>
+      <button type="button" class="hamburger-submenu-item" onclick="migrateLocalRunListToCloud()">Migrate Run List to Cloud</button>
+      <button type="button" class="hamburger-submenu-item" onclick="migrateLocalNamedRunListsToCloud()">Migrate Saved Lists to Cloud</button>
+      <button type="button" class="hamburger-submenu-item" onclick="migrateLocalCustomerCartToCloud()">Migrate Customer Cart to Cloud</button>
+      <button type="button" class="hamburger-submenu-item" onclick="migrateLocalCountersToCloud()">Push Item/Design Counters to Cloud</button>
       <button type="button" class="hamburger-submenu-item" onclick="migrateLocalMockupSettingsToCloud()">Push Mockup Settings to Cloud</button>
       <button type="button" class="hamburger-submenu-item" onclick="openTestPhotoScreen()">Test Photo Storage</button>
       <button type="button" class="hamburger-submenu-item" onclick="openTestCloudQuotesScreen()">Test Cloud Quotes</button>
@@ -3034,7 +3040,7 @@
         <button type="button" class="scan-btn" style="width:100%; margin-top:8px; padding:11px 0;" onclick="openPhotoPicker('mockup')">Choose from Gallery</button>
         <input type="file" id="mockup-input-camera" accept="image/*" capture="environment" style="display:none;" onchange="handleMockupFile(event, true)">
         <input type="file" id="mockup-input-upload" accept="image/*" style="display:none;" onchange="handleMockupFile(event)">
-        <div class="photo-upload-box" id="mockup-photo-box" style="width:100%; height:170px; margin-top:8px;">
+        <div class="photo-upload-box" id="mockup-photo-box" style="margin-top:8px;">
           <span class="photo-placeholder" id="mockup-photo-placeholder">&#128247;<br>No photo yet</span>
           <img id="mockup-photo-preview" style="display:none;" alt="">
           <button type="button" class="photo-remove" id="mockup-photo-remove" style="display:none;" onclick="clearMockupPhoto()">&#10005;</button>
@@ -4363,28 +4369,70 @@ function viewPhotoIfPresent(event) {
   if (productPhotoDataUrl) openLightbox(productPhotoDataUrl, event);
 }
 
+let heic2anyLibLoadPromise = null;
+
+function ensureHeic2AnyLoaded() {
+  if (typeof window.heic2any !== "undefined") return Promise.resolve();
+  if (heic2anyLibLoadPromise) return heic2anyLibLoadPromise;
+  heic2anyLibLoadPromise = new Promise(function(resolve, reject) {
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js";
+    script.onload = function() { resolve(); };
+    script.onerror = function() { reject(new Error("Could not load the HEIC conversion library")); };
+    document.head.appendChild(script);
+  });
+  return heic2anyLibLoadPromise;
+}
+
+// iPhones share photos as HEIC by default, which most non-Safari mobile
+// browsers (Android Chrome included) can't decode in an <img> or canvas
+// at all -- the photo just silently fails to display, with no useful
+// error, which is exactly what "customer sent me a photo, crop tool
+// shows a broken image" turns out to be. Converting to JPEG first (via
+// a lazily-loaded library, same CDN pattern as the crop tool itself)
+// means that photo just works instead of dead-ending. Returns the
+// original file unchanged if it isn't HEIC, or if conversion itself
+// fails for some reason -- the caller's own error handling is still the
+// backstop for that case.
+async function convertHeicIfNeeded(file) {
+  const looksLikeHeic = /^image\/hei[cf]/i.test(file.type || "") || /\.hei[cf]$/i.test(file.name || "");
+  if (!looksLikeHeic) return file;
+  try {
+    await ensureHeic2AnyLoaded();
+    const result = await window.heic2any({ blob: file, toType: "image/jpeg", quality: 0.9 });
+    const jpegBlob = Array.isArray(result) ? result[0] : result;
+    return new File([jpegBlob], (file.name || "photo").replace(/\.hei[cf]$/i, ".jpg"), { type: "image/jpeg" });
+  } catch (e) {
+    console.error("HEIC conversion failed:", e);
+    return file;
+  }
+}
+
 function compressImageFile(file, maxDim, quality) {
-  return new Promise(function(resolve, reject) {
-    const reader = new FileReader();
-    reader.onerror = function() { reject(new Error("Could not read file")); };
-    reader.onload = function() {
-      const img = new Image();
-      img.onerror = function() { reject(new Error("Could not decode image")); };
-      img.onload = function() {
-        let w = img.width, h = img.height;
-        if (w > h && w > maxDim) { h = Math.round(h * (maxDim / w)); w = maxDim; }
-        else if (h > maxDim) { w = Math.round(w * (maxDim / h)); h = maxDim; }
-        const canvas = document.createElement("canvas");
-        canvas.width = w; canvas.height = h;
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL("image/jpeg", quality));
+  return convertHeicIfNeeded(file).then(function(workingFile) {
+    return new Promise(function(resolve, reject) {
+      const reader = new FileReader();
+      reader.onerror = function() { reject(new Error("Could not read file")); };
+      reader.onload = function() {
+        const img = new Image();
+        img.onerror = function() { reject(new Error("Could not decode image")); };
+        img.onload = function() {
+          let w = img.width, h = img.height;
+          if (w > h && w > maxDim) { h = Math.round(h * (maxDim / w)); w = maxDim; }
+          else if (h > maxDim) { w = Math.round(w * (maxDim / h)); h = maxDim; }
+          const canvas = document.createElement("canvas");
+          canvas.width = w; canvas.height = h;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL("image/jpeg", quality));
+        };
+        img.src = reader.result;
       };
-      img.src = reader.result;
-    };
-    reader.readAsDataURL(file);
+      reader.readAsDataURL(workingFile);
+    });
   });
 }
+
 
 async function handlePhotoSelected(event) {
   const file = event.target.files && event.target.files[0];
@@ -4507,13 +4555,89 @@ let screenBeforeGallery = "calc";
 let activeMeetingId = null;
 let screenBeforeMeetings = "calc";
 
-async function getMeetings() {
+// Kept for the migration tool and as an emergency reference -- no longer
+// used by the live app once Meetings' cutover happens.
+async function getMeetingsLocalLegacy() {
   const raw = await storageGet("nextex_meetings");
   try { return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
 }
 
+// LIVE Meetings storage: Firestore, same concurrency-safe pattern as
+// quotes/gallery/items/albums.
+let lastLoadedMeetingIds = null;
+
+async function getMeetings() {
+  const snapshot = await db.collection("meetings").get();
+  const result = snapshot.docs.map(function(doc) {
+    return Object.assign({ id: doc.id }, doc.data());
+  });
+  lastLoadedMeetingIds = new Set(result.map(function(m) { return m.id; }));
+  return result;
+}
+
 async function saveMeetings(meetings) {
-  await storageSet("nextex_meetings", JSON.stringify(meetings));
+  try {
+    const newIds = new Set(meetings.map(function(m) { return m.id; }));
+    const idsToDelete = [];
+    if (lastLoadedMeetingIds) {
+      lastLoadedMeetingIds.forEach(function(id) { if (!newIds.has(id)) idsToDelete.push(id); });
+    }
+    const ops = meetings.map(function(m) {
+      const data = Object.assign({}, m);
+      delete data.id;
+      return { type: "set", id: m.id, data: data };
+    }).concat(idsToDelete.map(function(id) { return { type: "delete", id: id }; }));
+
+    for (let i = 0; i < ops.length; i += 400) {
+      const batch = db.batch();
+      ops.slice(i, i + 400).forEach(function(op) {
+        const ref = db.collection("meetings").doc(op.id);
+        if (op.type === "set") batch.set(ref, op.data); else batch.delete(ref);
+      });
+      await batch.commit();
+    }
+    lastLoadedMeetingIds = newIds;
+    return true;
+  } catch (e) {
+    console.error("saveMeetings failed:", e);
+    return false;
+  }
+}
+
+async function upsertMeetingsToCloud(meetings) {
+  try {
+    const ops = meetings.map(function(m) {
+      const data = Object.assign({}, m);
+      delete data.id;
+      return { id: m.id, data: data };
+    });
+    for (let i = 0; i < ops.length; i += 400) {
+      const batch = db.batch();
+      ops.slice(i, i + 400).forEach(function(op) { batch.set(db.collection("meetings").doc(op.id), op.data); });
+      await batch.commit();
+    }
+    return true;
+  } catch (e) {
+    console.error("upsertMeetingsToCloud failed:", e);
+    return false;
+  }
+}
+
+async function migrateLocalMeetingsToCloud() {
+  document.getElementById("hamburger-drawer").classList.remove("show");
+  document.getElementById("hamburger-backdrop").classList.remove("show");
+  const local = await getMeetingsLocalLegacy();
+  if (local.length === 0) {
+    showToast("No local meetings to migrate.", "error");
+    return;
+  }
+  showConfirm(
+    "Migrate " + local.length + " meeting" + (local.length === 1 ? "" : "s") + " to the cloud? This only adds/updates \u2014 it never deletes anything already in the cloud, so it's safe to run from multiple devices.",
+    async function() {
+      const ok = await upsertMeetingsToCloud(local);
+      showToast(ok ? "Migrated " + local.length + " meetings to the cloud." : "Migration hit an error \u2014 check the console, or try again.", ok ? "success" : "error");
+    }
+  );
 }
 
 async function loadActiveMeetingId() {
@@ -4539,13 +4663,85 @@ async function getActiveMeeting() {
 let activeSourcingId = null;
 let screenBeforeSourcing = "calc";
 
-async function getSourcingList() {
+async function getSourcingListLocalLegacy() {
   const raw = await storageGet("nextex_sourcing");
   try { return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
 }
 
+let lastLoadedSourcingIds = null;
+
+async function getSourcingList() {
+  const snapshot = await db.collection("sourcing").get();
+  const result = snapshot.docs.map(function(doc) {
+    return Object.assign({ id: doc.id }, doc.data());
+  });
+  lastLoadedSourcingIds = new Set(result.map(function(s) { return s.id; }));
+  return result;
+}
+
 async function saveSourcingList(list) {
-  await storageSet("nextex_sourcing", JSON.stringify(list));
+  try {
+    const newIds = new Set(list.map(function(s) { return s.id; }));
+    const idsToDelete = [];
+    if (lastLoadedSourcingIds) {
+      lastLoadedSourcingIds.forEach(function(id) { if (!newIds.has(id)) idsToDelete.push(id); });
+    }
+    const ops = list.map(function(s) {
+      const data = Object.assign({}, s);
+      delete data.id;
+      return { type: "set", id: s.id, data: data };
+    }).concat(idsToDelete.map(function(id) { return { type: "delete", id: id }; }));
+
+    for (let i = 0; i < ops.length; i += 400) {
+      const batch = db.batch();
+      ops.slice(i, i + 400).forEach(function(op) {
+        const ref = db.collection("sourcing").doc(op.id);
+        if (op.type === "set") batch.set(ref, op.data); else batch.delete(ref);
+      });
+      await batch.commit();
+    }
+    lastLoadedSourcingIds = newIds;
+    return true;
+  } catch (e) {
+    console.error("saveSourcingList failed:", e);
+    return false;
+  }
+}
+
+async function upsertSourcingToCloud(list) {
+  try {
+    const ops = list.map(function(s) {
+      const data = Object.assign({}, s);
+      delete data.id;
+      return { id: s.id, data: data };
+    });
+    for (let i = 0; i < ops.length; i += 400) {
+      const batch = db.batch();
+      ops.slice(i, i + 400).forEach(function(op) { batch.set(db.collection("sourcing").doc(op.id), op.data); });
+      await batch.commit();
+    }
+    return true;
+  } catch (e) {
+    console.error("upsertSourcingToCloud failed:", e);
+    return false;
+  }
+}
+
+async function migrateLocalSourcingToCloud() {
+  document.getElementById("hamburger-drawer").classList.remove("show");
+  document.getElementById("hamburger-backdrop").classList.remove("show");
+  const local = await getSourcingListLocalLegacy();
+  if (local.length === 0) {
+    showToast("No local sourcing entries to migrate.", "error");
+    return;
+  }
+  showConfirm(
+    "Migrate " + local.length + " sourcing entr" + (local.length === 1 ? "y" : "ies") + " to the cloud? This only adds/updates \u2014 safe to run from multiple devices.",
+    async function() {
+      const ok = await upsertSourcingToCloud(local);
+      showToast(ok ? "Migrated " + local.length + " sourcing entries to the cloud." : "Migration hit an error \u2014 check the console, or try again.", ok ? "success" : "error");
+    }
+  );
 }
 
 async function loadActiveSourcingId() {
@@ -5747,10 +5943,8 @@ function clearPendingSupplierPhoto() {
 // ---------------------------------------------------------------
 async function buildFullBackup() {
   const rawSuppliers = await storageGet("nextex_suppliers");
-  const rawCustomerCart = await storageGet("nextex_customer_cart");
-  let suppliers = [], customerCart = [];
+  let suppliers = [];
   try { suppliers = rawSuppliers ? JSON.parse(rawSuppliers) : []; } catch (e) { suppliers = []; }
-  try { customerCart = rawCustomerCart ? JSON.parse(rawCustomerCart) : []; } catch (e) { customerCart = []; }
 
   return {
     app: "NexTex Calculator",
@@ -5765,7 +5959,7 @@ async function buildFullBackup() {
       sourcing: await getSourcingList(),
       sessionPhotos: await getSessionPhotos(),
       albums: await getAlbums(),
-      customerCart: customerCart
+      customerCart: await getCustomerCartFromCloud()
     }
   };
 }
@@ -5884,11 +6078,9 @@ async function handleImportBackupFile(event) {
         await saveAlbums(r.merged);
       }
       if (Array.isArray(d.customerCart)) {
-        const currentRaw = await storageGet("nextex_customer_cart");
-        let current = [];
-        try { current = currentRaw ? JSON.parse(currentRaw) : []; } catch (e) { current = []; }
+        const current = await getCustomerCartFromCloud();
         const r = mergeById(current, d.customerCart, "key");
-        await storageSet("nextex_customer_cart", JSON.stringify(r.merged));
+        await upsertCustomerCartToCloud(r.merged);
       }
 
       showToast("Import complete: added " + results.join(", ") + ".", "success");
@@ -6077,22 +6269,84 @@ async function renderTestCloudItemsScreen() {
   }
 }
 
+// ---------------------------------------------------------------
+// Item # / Design # counters -- LIVE on Firestore, a single shared
+// document (there is exactly one "next number" for the whole team,
+// same shape as mockup settings). This one matters more than most:
+// these were local-storage-only, so two devices creating items
+// independently would each track their own separate counter and were
+// guaranteed to drift apart and hand out duplicate Item #s over time
+// -- not just a sync inconvenience but a real numbering-collision bug.
+// Note: the actual increment (read current value, compute the next
+// one, save it back) still isn't wrapped in a Firestore transaction,
+// so two devices creating an item in the same instant could in theory
+// still collide -- rare in practice for a small team doing this
+// occasionally, but worth hardening with a transaction later if it
+// ever actually happens.
+// ---------------------------------------------------------------
 async function getNextItemNumber() {
+  try {
+    const doc = await db.collection("settings").doc("counters").get();
+    return (doc.exists && doc.data().nextItemNumber) || "";
+  } catch (e) {
+    console.error("getNextItemNumber failed:", e);
+    return "";
+  }
+}
+
+async function setNextItemNumberValue(val) {
+  try {
+    await db.collection("settings").doc("counters").set({ nextItemNumber: val }, { merge: true });
+  } catch (e) {
+    console.error("setNextItemNumberValue failed:", e);
+  }
+}
+
+async function getNextDesignNumber() {
+  try {
+    const doc = await db.collection("settings").doc("counters").get();
+    return (doc.exists && doc.data().nextDesignNumber) || 1;
+  } catch (e) {
+    console.error("getNextDesignNumber failed:", e);
+    return 1;
+  }
+}
+
+async function setNextDesignNumberValue(n) {
+  try {
+    await db.collection("settings").doc("counters").set({ nextDesignNumber: n }, { merge: true });
+  } catch (e) {
+    console.error("setNextDesignNumberValue failed:", e);
+  }
+}
+
+async function getNextItemNumberLocalLegacy() {
   const raw = await storageGet("nextex_next_item_number");
   return raw || "";
 }
 
-async function setNextItemNumberValue(val) {
-  await storageSet("nextex_next_item_number", val);
-}
-
-async function getNextDesignNumber() {
+async function getNextDesignNumberLocalLegacy() {
   const raw = await storageGet("nextex_next_design_number");
   return raw ? parseInt(raw, 10) : 1;
 }
 
-async function setNextDesignNumberValue(n) {
-  await storageSet("nextex_next_design_number", String(n));
+async function migrateLocalCountersToCloud() {
+  document.getElementById("hamburger-drawer").classList.remove("show");
+  document.getElementById("hamburger-backdrop").classList.remove("show");
+  const itemNum = await getNextItemNumberLocalLegacy();
+  const designNum = await getNextDesignNumberLocalLegacy();
+  if (!itemNum) {
+    showToast("No local item/design counters on this device to migrate.", "error");
+    return;
+  }
+  showConfirm(
+    "Push this device's next Item # (" + itemNum + ") and Design # (" + designNum + ") to the cloud? This becomes the shared counter for every device \u2014 only do this from whichever device has the most up-to-date numbers.",
+    async function() {
+      await setNextItemNumberValue(itemNum);
+      await setNextDesignNumberValue(designNum);
+      showToast("Item/Design counters pushed to the cloud for all devices.", "success");
+    }
+  );
 }
 
 function formatDesignNumber(n) {
@@ -6121,12 +6375,31 @@ function openCropModal(dataUrl, aspectRatio) {
     ensureCropperLibLoaded().then(function() {
       cropResolveCallback = resolve;
       const img = document.getElementById("crop-target-image");
-      img.src = dataUrl;
       document.getElementById("crop-overlay").classList.add("show");
-      if (img.complete) {
+
+      function onDecodeFail() {
+        img.onload = null;
+        img.onerror = null;
+        document.getElementById("crop-overlay").classList.remove("show");
+        showToast("Could not open that photo \u2014 this browser can't display that file format. Try saving/sharing it as a JPEG or PNG first.", "error");
+        cropResolveCallback = null;
+        resolve(null);
+      }
+      function onDecodeOk() {
+        img.onload = null;
+        img.onerror = null;
         startCropper(img, aspectRatio);
-      } else {
-        img.onload = function() { startCropper(img, aspectRatio); };
+      }
+
+      img.onload = onDecodeOk;
+      img.onerror = onDecodeFail;
+      img.src = dataUrl;
+      // A cached/already-decoded image can be "complete" before either
+      // handler above even gets a chance to attach -- but complete is
+      // also true for a FAILED load, so naturalWidth is what actually
+      // tells the two cases apart.
+      if (img.complete) {
+        if (img.naturalWidth > 0) onDecodeOk(); else onDecodeFail();
       }
     }).catch(function() {
       showToast("Could not load the crop tool. Check your connection and try again.", "error");
@@ -6168,7 +6441,8 @@ function cancelCrop() {
 // optional -- omitted (the default for most callers) means a free-form
 // crop; a fixed ratio like 1 (square) locks the crop box to that shape.
 async function captureAndCropPhoto(file, aspectRatio) {
-  const rawDataUrl = await readFileAsDataURL(file);
+  const workingFile = await convertHeicIfNeeded(file);
+  const rawDataUrl = await readFileAsDataURL(workingFile);
   return await openCropModal(rawDataUrl, aspectRatio);
 }
 
@@ -10382,14 +10656,106 @@ function renderVendorFilterChip() {
 let customerCart = [];
 let expandedCartKey = null;
 
-async function loadCart() {
+// LIVE on Firestore -- a shared, in-progress customer rate sheet, so
+// everyone on the team builds the same cart rather than each device
+// keeping its own. Entries use their existing "key" field as the
+// Firestore document id (same role "id" plays everywhere else).
+async function getCustomerCartLocalLegacy() {
   const raw = await storageGet("nextex_customer_cart");
-  try { customerCart = raw ? JSON.parse(raw) : []; } catch (e) { customerCart = []; }
+  try { return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
+}
+
+// Pure read for callers (like the backup builder) that just want the
+// current cart contents without touching the live UI's cart state --
+// loadCart() below is the one that screen actually uses, and it
+// intentionally mutates the module-level customerCart/tracking vars.
+async function getCustomerCartFromCloud() {
+  try {
+    const snapshot = await db.collection("customerCart").get();
+    return snapshot.docs.map(function(doc) { return Object.assign({ key: doc.id }, doc.data()); });
+  } catch (e) {
+    console.error("getCustomerCartFromCloud failed:", e);
+    return [];
+  }
+}
+
+let lastLoadedCartKeys = null;
+
+async function loadCart() {
+  try {
+    const snapshot = await db.collection("customerCart").get();
+    customerCart = snapshot.docs.map(function(doc) {
+      return Object.assign({ key: doc.id }, doc.data());
+    });
+    lastLoadedCartKeys = new Set(customerCart.map(function(c) { return c.key; }));
+  } catch (e) {
+    console.error("loadCart failed:", e);
+    customerCart = [];
+  }
 }
 
 async function saveCart() {
-  await storageSet("nextex_customer_cart", JSON.stringify(customerCart));
+  try {
+    const newKeys = new Set(customerCart.map(function(c) { return c.key; }));
+    const keysToDelete = [];
+    if (lastLoadedCartKeys) {
+      lastLoadedCartKeys.forEach(function(k) { if (!newKeys.has(k)) keysToDelete.push(k); });
+    }
+    const ops = customerCart.map(function(c) {
+      const data = Object.assign({}, c);
+      delete data.key;
+      return { type: "set", id: c.key, data: data };
+    }).concat(keysToDelete.map(function(k) { return { type: "delete", id: k }; }));
+
+    for (let i = 0; i < ops.length; i += 400) {
+      const batch = db.batch();
+      ops.slice(i, i + 400).forEach(function(op) {
+        const ref = db.collection("customerCart").doc(op.id);
+        if (op.type === "set") batch.set(ref, op.data); else batch.delete(ref);
+      });
+      await batch.commit();
+    }
+    lastLoadedCartKeys = newKeys;
+  } catch (e) {
+    console.error("saveCart failed:", e);
+  }
   updateCartBadge();
+}
+
+async function upsertCustomerCartToCloud(list) {
+  try {
+    const ops = list.map(function(c) {
+      const data = Object.assign({}, c);
+      delete data.key;
+      return { id: c.key, data: data };
+    });
+    for (let i = 0; i < ops.length; i += 400) {
+      const batch = db.batch();
+      ops.slice(i, i + 400).forEach(function(op) { batch.set(db.collection("customerCart").doc(op.id), op.data); });
+      await batch.commit();
+    }
+    return true;
+  } catch (e) {
+    console.error("upsertCustomerCartToCloud failed:", e);
+    return false;
+  }
+}
+
+async function migrateLocalCustomerCartToCloud() {
+  document.getElementById("hamburger-drawer").classList.remove("show");
+  document.getElementById("hamburger-backdrop").classList.remove("show");
+  const local = await getCustomerCartLocalLegacy();
+  if (local.length === 0) {
+    showToast("No local cart items on this device to migrate.", "error");
+    return;
+  }
+  showConfirm(
+    "Migrate this device's cart (" + local.length + " item" + (local.length === 1 ? "" : "s") + ") to the shared cloud cart?",
+    async function() {
+      const ok = await upsertCustomerCartToCloud(local);
+      showToast(ok ? "Cart migrated to the cloud." : "Migration hit an error \u2014 check the console, or try again.", ok ? "success" : "error");
+    }
+  );
 }
 
 function updateCartBadge() {
@@ -10553,13 +10919,88 @@ async function handleTestPhotoCapture(event) {
 // fabric-hanger QR codes against existing Saved Quotes. Not a new
 // quote store -- just id references into getQuotes(), resolved fresh
 // on every render so it always reflects the real, current data.
+// LIVE on Firestore now, same concurrency-safe pattern as everything
+// else -- so a scan session isn't stranded on whichever phone started it.
 // ---------------------------------------------------------------
-async function getRunList() {
+async function getRunListLocalLegacy() {
   const raw = await storageGet("nextex_runlist");
   try { return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
 }
+
+let lastLoadedRunListIds = null;
+
+async function getRunList() {
+  const snapshot = await db.collection("runlist").get();
+  const result = snapshot.docs.map(function(doc) {
+    return Object.assign({ id: doc.id }, doc.data());
+  });
+  lastLoadedRunListIds = new Set(result.map(function(r) { return r.id; }));
+  return result;
+}
+
 async function saveRunListItems(list) {
-  return await storageSet("nextex_runlist", JSON.stringify(list));
+  try {
+    const newIds = new Set(list.map(function(r) { return r.id; }));
+    const idsToDelete = [];
+    if (lastLoadedRunListIds) {
+      lastLoadedRunListIds.forEach(function(id) { if (!newIds.has(id)) idsToDelete.push(id); });
+    }
+    const ops = list.map(function(r) {
+      const data = Object.assign({}, r);
+      delete data.id;
+      return { type: "set", id: r.id, data: data };
+    }).concat(idsToDelete.map(function(id) { return { type: "delete", id: id }; }));
+
+    for (let i = 0; i < ops.length; i += 400) {
+      const batch = db.batch();
+      ops.slice(i, i + 400).forEach(function(op) {
+        const ref = db.collection("runlist").doc(op.id);
+        if (op.type === "set") batch.set(ref, op.data); else batch.delete(ref);
+      });
+      await batch.commit();
+    }
+    lastLoadedRunListIds = newIds;
+    return true;
+  } catch (e) {
+    console.error("saveRunListItems failed:", e);
+    return false;
+  }
+}
+
+async function upsertRunListToCloud(list) {
+  try {
+    const ops = list.map(function(r) {
+      const data = Object.assign({}, r);
+      delete data.id;
+      return { id: r.id, data: data };
+    });
+    for (let i = 0; i < ops.length; i += 400) {
+      const batch = db.batch();
+      ops.slice(i, i + 400).forEach(function(op) { batch.set(db.collection("runlist").doc(op.id), op.data); });
+      await batch.commit();
+    }
+    return true;
+  } catch (e) {
+    console.error("upsertRunListToCloud failed:", e);
+    return false;
+  }
+}
+
+async function migrateLocalRunListToCloud() {
+  document.getElementById("hamburger-drawer").classList.remove("show");
+  document.getElementById("hamburger-backdrop").classList.remove("show");
+  const local = await getRunListLocalLegacy();
+  if (local.length === 0) {
+    showToast("No local run list items on this device to migrate.", "error");
+    return;
+  }
+  showConfirm(
+    "Migrate this device's current run list (" + local.length + " item" + (local.length === 1 ? "" : "s") + ") to the cloud?",
+    async function() {
+      const ok = await upsertRunListToCloud(local);
+      showToast(ok ? "Run list migrated to the cloud." : "Migration hit an error \u2014 check the console, or try again.", ok ? "success" : "error");
+    }
+  );
 }
 
 let runListSelectedIds = new Set();
@@ -10590,17 +11031,57 @@ function closeRunListScreen() {
 }
 
 // ---------------------------------------------------------------
-// Saved Lists: named archives of a run list's item ids. Stored in this
-// device's browser storage (nextex_named_runlists) -- there's no file or
-// path, since this is a web app, not a filesystem. This screen is what
-// makes that storage actually visible and reachable again.
+// Saved Lists: named archives of a run list's item ids. These entries
+// have no stable id of their own (accessed by plain array index
+// throughout this screen), so rather than restructure that addressing
+// this stores the whole array as ONE shared Firestore document instead
+// of one document per entry -- every existing index-based call site
+// keeps working unchanged, it just now reads/writes the cloud copy.
 // ---------------------------------------------------------------
-async function getNamedRunLists() {
+async function getNamedRunListsLocalLegacy() {
   const raw = await storageGet("nextex_named_runlists");
   try { return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
 }
+
+async function getNamedRunLists() {
+  try {
+    const doc = await db.collection("settings").doc("namedRunLists").get();
+    return (doc.exists && doc.data().list) || [];
+  } catch (e) {
+    console.error("getNamedRunLists failed:", e);
+    return [];
+  }
+}
+
 async function saveNamedRunLists(list) {
-  return await storageSet("nextex_named_runlists", JSON.stringify(list));
+  try {
+    await db.collection("settings").doc("namedRunLists").set({ list: list });
+    return true;
+  } catch (e) {
+    console.error("saveNamedRunLists failed:", e);
+    return false;
+  }
+}
+
+async function migrateLocalNamedRunListsToCloud() {
+  document.getElementById("hamburger-drawer").classList.remove("show");
+  document.getElementById("hamburger-backdrop").classList.remove("show");
+  const local = await getNamedRunListsLocalLegacy();
+  if (local.length === 0) {
+    showToast("No local saved lists on this device to migrate.", "error");
+    return;
+  }
+  showConfirm(
+    "Push this device's " + local.length + " saved list" + (local.length === 1 ? "" : "s") + " to the cloud? This replaces whatever's currently there \u2014 only do this from whichever device has the complete/correct set.",
+    async function() {
+      const cloudExisting = await getNamedRunLists();
+      const merged = cloudExisting.concat(local.filter(function(l) {
+        return !cloudExisting.some(function(c) { return c.name === l.name && c.savedAt === l.savedAt; });
+      }));
+      const ok = await saveNamedRunLists(merged);
+      showToast(ok ? "Saved lists migrated to the cloud." : "Migration hit an error \u2014 check the console, or try again.", ok ? "success" : "error");
+    }
+  );
 }
 
 let screenBeforeSavedRunLists = "calc";
@@ -13430,7 +13911,16 @@ async function generateMockup() {
 function mockupFileName() {
   const raw = document.getElementById("mockup-name").value.trim() || document.getElementById("mockup-product").value;
   const safe = raw.replace(/[^a-z0-9\-_ ]/gi, "").trim().replace(/\s+/g, "_") || "cushion";
-  return "NexTex_Mockup_" + safe + "_" + new Date().toISOString().slice(0, 10) + ".png";
+  // Full date+time to the millisecond, not just the date -- two mockups
+  // made the same day with the same (or blank) design name used to
+  // collide on an identical filename, which is why only the first
+  // save/download actually showed up: the phone's browser or media
+  // scanner treated the second one as the same file rather than a new
+  // one. A short random suffix on top closes the gap completely, since
+  // even millisecond timestamps can theoretically tie.
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-").replace("Z", "");
+  const rand = Math.random().toString(36).slice(2, 6);
+  return "NexTex_Mockup_" + safe + "_" + stamp + "_" + rand + ".png";
 }
 
 function downloadMockup() {
