@@ -8199,16 +8199,20 @@ function startLiveTranscription(context) {
       // Rebuilding fresh each call is idempotent regardless of whether
       // resultIndex behaves correctly, so it can't duplicate that way.
       //
-      // Separately: some devices re-finalize an EXPANDING version of the
-      // same utterance multiple times in a row instead of cleanly moving
-      // on to new audio ("who is closing", "who is closing and", "who is
-      // closing and who is closing and" ...) -- each one lands as its own
-      // "final" entry in event.results, so a plain concatenation still
-      // looks like the same short phrase endlessly repeating even with
-      // the fix above. Collapsing each new final segment into the
-      // previous one when they're a prefix of each other (keeping
-      // whichever is more complete) catches this without needing to
-      // assume anything about why the device does it.
+      // Separately: some devices re-finalize the SAME stretch of speech
+      // more than once instead of cleanly moving on -- sometimes as a
+      // short phrase growing word by word, sometimes as an entire long
+      // passage re-recognized as a whole and drifting in wording as it
+      // goes. Each attempt lands as its own "final" entry in
+      // event.results, so a plain concatenation reads as that passage
+      // repeated back to back. A strict character-for-character prefix
+      // check only catches the first shape; comparing the opening few
+      // words of consecutive segments catches the second one too, since
+      // two independent attempts at the same audio reliably start the
+      // same way even if they later diverge.
+      function openingWords(text, n) {
+        return text.trim().toLowerCase().split(/\s+/).slice(0, n).join(" ");
+      }
       const finalSegments = [];
       let interim = "";
       for (let i = 0; i < event.results.length; i++) {
@@ -8217,7 +8221,11 @@ function startLiveTranscription(context) {
           const trimmed = transcriptPiece.trim();
           if (!trimmed) continue;
           const last = finalSegments[finalSegments.length - 1];
-          if (last && (trimmed.indexOf(last) === 0 || last.indexOf(trimmed) === 0)) {
+          const isPrefixMatch = last && (trimmed.indexOf(last) === 0 || last.indexOf(trimmed) === 0);
+          const isSameOpening = last && openingWords(trimmed, 6) === openingWords(last, 6) && openingWords(last, 6).split(" ").length >= 4;
+          if (isPrefixMatch || isSameOpening) {
+            // Same utterance being re-recognized -- keep whichever attempt
+            // is longer (usually the later, more complete/refined one).
             finalSegments[finalSegments.length - 1] = trimmed.length > last.length ? trimmed : last;
           } else {
             finalSegments.push(trimmed);
