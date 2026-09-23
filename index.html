@@ -2660,7 +2660,7 @@
       </div>
       <button type="button" class="scan-btn" style="width:100%; margin-bottom:10px; padding:11px 0;" onclick="openPhotoPicker('meeting', currentMeetingDetailId)">Choose from Gallery</button>
       <input type="file" id="meeting-photo-input-camera" accept="image/*" capture="environment" style="display:none;" onchange="handleSessionPhotoSelected(event, 'meeting')">
-      <input type="file" id="meeting-photo-input-gallery" accept="image/*" style="display:none;" onchange="handleSessionPhotoSelected(event, 'meeting')">
+      <input type="file" id="meeting-photo-input-gallery" accept="image/*" multiple style="display:none;" onchange="handleSessionPhotoSelected(event, 'meeting')">
       <div id="meeting-detail-photos"></div>
 
       <p class="section-label" style="margin-top:20px;">Audio recording</p>
@@ -2776,7 +2776,7 @@
       </div>
       <button type="button" class="scan-btn" style="width:100%; margin-bottom:10px; padding:11px 0;" onclick="openPhotoPicker('sourcing', currentSourcingDetailId)">Choose from Gallery</button>
       <input type="file" id="sourcing-photo-input-camera" accept="image/*" capture="environment" style="display:none;" onchange="handleSessionPhotoSelected(event, 'sourcing')">
-      <input type="file" id="sourcing-photo-input-gallery" accept="image/*" style="display:none;" onchange="handleSessionPhotoSelected(event, 'sourcing')">
+      <input type="file" id="sourcing-photo-input-gallery" accept="image/*" multiple style="display:none;" onchange="handleSessionPhotoSelected(event, 'sourcing')">
       <div id="sourcing-detail-photos"></div>
 
       <p class="section-label" style="margin-top:20px;">Audio recording</p>
@@ -5743,35 +5743,40 @@ function triggerSessionPhotoGallery(context) {
 }
 
 async function handleSessionPhotoSelected(event, context) {
-  const file = event.target.files && event.target.files[0];
-  if (!file) return;
+  const files = event.target.files ? Array.from(event.target.files) : [];
   event.target.value = "";
+  if (files.length === 0) return;
   const id = context === "meeting" ? currentMeetingDetailId : currentSourcingDetailId;
   if (!id) return;
-  try {
-    const photoDataUrl = await captureAndCropPhoto(file);
-    if (!photoDataUrl) return;
-    const list = await getSessionPhotos();
-    const entry = {
+
+  const photoDataUrls = await processBulkPhotoFiles(files);
+  if (photoDataUrls === null) return; // user cancelled the whole batch
+  if (photoDataUrls.length === 0) {
+    showToast("Could not process " + (files.length === 1 ? "that photo" : "those photos") + ".", "error");
+    return;
+  }
+
+  const list = await getSessionPhotos();
+  photoDataUrls.forEach(function(photoDataUrl) {
+    list.push({
       id: "sphoto_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
       photo: photoDataUrl,
       meetingId: context === "meeting" ? id : null,
       sourcingId: context === "sourcing" ? id : null,
       timestamp: new Date().toISOString()
-    };
-    list.push(entry);
-    const savedOk = await saveSessionPhotos(list);
-    if (!savedOk) {
-      showToast("Could not save that photo \u2014 storage may be full.", "error");
-      return;
-    }
-    showToast("Photo added.", "success");
-    if (context === "meeting") renderMeetingDetail(id);
-    else renderSourcingDetail(id);
-  } catch (e) {
-    showToast("Could not process that photo.", "error");
+    });
+  });
+  const addedCount = photoDataUrls.length;
+  const savedOk = await saveSessionPhotos(list);
+  if (!savedOk) {
+    showToast("Could not save " + (addedCount === 1 ? "that photo" : "those photos") + " \u2014 storage may be full.", "error");
+    return;
   }
+  showToast(addedCount + (addedCount === 1 ? " photo" : " photos") + " added.", "success");
+  if (context === "meeting") renderMeetingDetail(id);
+  else renderSourcingDetail(id);
 }
+
 
 async function deleteSessionPhoto(photoId, context, entityId) {
   const list = await getSessionPhotos();
@@ -8147,7 +8152,19 @@ async function startAudioRecording(context) {
       timerEl.textContent = mins + ":" + secs;
     }, 500);
   } catch (e) {
-    showToast("Could not access the microphone. Check permissions and try again.", "error");
+    // This is a browser-level permission tied to this website's address,
+    // not a phone app permission -- there's no entry for it in the
+    // phone's own Settings > Apps list, which is exactly where someone
+    // would naturally look first and come up empty. NotAllowedError
+    // means it was actually blocked (the fixable case); other errors
+    // (no mic hardware, mic in use elsewhere, etc.) get a plainer message.
+    if (e.name === "NotAllowedError" || e.name === "PermissionDeniedError") {
+      showToast("Microphone access is blocked for this site. In your browser (not your phone's app settings), open this page's site info/permissions and allow the microphone, then try again.", "error");
+    } else if (e.name === "NotFoundError" || e.name === "DevicesNotFoundError") {
+      showToast("No microphone was found on this device.", "error");
+    } else {
+      showToast("Could not access the microphone. It may be in use by another app.", "error");
+    }
   }
 }
 
