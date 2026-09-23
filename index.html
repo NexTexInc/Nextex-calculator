@@ -1036,6 +1036,7 @@
     background: var(--card);
     color: var(--text-primary);
   }
+  .note-field textarea.tall { min-height: 140px; }
 
   .customer-quote-total-row {
     display: flex;
@@ -2670,6 +2671,11 @@
       <div id="meeting-audio-list"></div>
 
       <div class="field note-field">
+        <label for="meeting-transcript-notes">Transcript &amp; summary</label>
+        <textarea id="meeting-transcript-notes" class="tall" placeholder="Recorded sessions are summarized here automatically..." onchange="saveMeetingTranscriptNotes()"></textarea>
+      </div>
+
+      <div class="field note-field">
         <label for="meeting-detail-notes">Notes</label>
         <textarea id="meeting-detail-notes" placeholder="Optional details..." onchange="saveMeetingDetailNotes()"></textarea>
       </div>
@@ -2785,6 +2791,11 @@
       <div class="audio-timer" id="sourcing-audio-timer" style="display:none;">00:00</div>
       <div class="field-hint" id="sourcing-live-transcript" style="display:none; margin-top:6px; max-height:80px; overflow-y:auto;"></div>
       <div id="sourcing-audio-list"></div>
+
+      <div class="field note-field">
+        <label for="sourcing-transcript-notes">Transcript &amp; summary</label>
+        <textarea id="sourcing-transcript-notes" class="tall" placeholder="Recorded sessions are summarized here automatically..." onchange="saveSourcingTranscriptNotes()"></textarea>
+      </div>
 
       <div class="field note-field">
         <label for="sourcing-detail-notes">Notes</label>
@@ -4985,6 +4996,7 @@ async function renderMeetingDetail(meetingId) {
       (meeting.status === "finalized" ? ' &middot; Finalized ' + escapeHtml(meeting.finalizedDate || "") : "") +
     '</div>';
   document.getElementById("meeting-detail-notes").value = meeting.notes || "";
+  document.getElementById("meeting-transcript-notes").value = meeting.transcriptNotes || "";
 
   const finalizeBtn = document.getElementById("meeting-finalize-btn");
   finalizeBtn.textContent = meeting.status === "active" ? "Finalize meeting" : "Reopen meeting";
@@ -5045,6 +5057,15 @@ async function saveMeetingDetailNotes() {
   const meeting = meetings.find(function(m) { return m.id === currentMeetingDetailId; });
   if (!meeting) return;
   meeting.notes = document.getElementById("meeting-detail-notes").value;
+  await saveMeetings(meetings);
+}
+
+async function saveMeetingTranscriptNotes() {
+  if (!currentMeetingDetailId) return;
+  const meetings = await getMeetings();
+  const meeting = meetings.find(function(m) { return m.id === currentMeetingDetailId; });
+  if (!meeting) return;
+  meeting.transcriptNotes = document.getElementById("meeting-transcript-notes").value;
   await saveMeetings(meetings);
 }
 
@@ -5144,6 +5165,10 @@ async function downloadMeetingSummary() {
   lines.push("NOTES");
   lines.push("-".repeat(40));
   lines.push(meeting.notes || "(none)");
+  lines.push("");
+  lines.push("AI TRANSCRIPT & SUMMARY");
+  lines.push("-".repeat(40));
+  lines.push(meeting.transcriptNotes || "(none)");
   lines.push("");
   lines.push("QUOTES IN THIS MEETING (" + meetingQuotes.length + ")");
   lines.push("-".repeat(40));
@@ -8159,16 +8184,31 @@ function startLiveTranscription(context) {
     recognition.interimResults = true;
     recognition.lang = navigator.language || "en-US";
 
+    // Everything accumulated in PRIOR sessions (before this particular
+    // recognition instance started, e.g. after an auto-restart) -- this
+    // session's own results get rebuilt fresh and appended after it.
+    const sessionBaseText = state.transcriptFinal;
+
     recognition.onresult = function(event) {
+      // Rebuilding from the full results array every time (rather than
+      // accumulating via += from event.resultIndex onward) is deliberate:
+      // resultIndex isn't reliably respected on every device/browser, and
+      // trusting it caused every already-finalized phrase to get
+      // re-appended on each subsequent result -- the transcript snowballed
+      // into the same growing sentence repeated dozens of times over.
+      // Rebuilding fresh each call is idempotent regardless of whether
+      // resultIndex behaves correctly, so it can't duplicate.
+      let sessionFinalText = "";
       let interim = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
+      for (let i = 0; i < event.results.length; i++) {
         const transcriptPiece = event.results[i][0].transcript;
         if (event.results[i].isFinal) {
-          state.transcriptFinal += transcriptPiece + " ";
+          sessionFinalText += transcriptPiece + " ";
         } else {
           interim += transcriptPiece;
         }
       }
+      state.transcriptFinal = sessionBaseText + sessionFinalText;
       if (liveEl) liveEl.textContent = (state.transcriptFinal + interim).trim() || "Listening\u2026";
     };
 
@@ -8259,10 +8299,10 @@ async function summarizeTranscript(transcript) {
 // the recording's content outright.
 async function appendTranscriptToNotes(context, transcript, recordingLabel) {
   if (!transcript) {
-    showToast("No speech was captured for that session \u2014 nothing was added to Notes.", "error");
+    showToast("No speech was captured for that session \u2014 nothing was added.", "error");
     return;
   }
-  const textarea = document.getElementById(context + "-detail-notes");
+  const textarea = document.getElementById(context + "-transcript-notes");
   if (!textarea) return;
   const liveEl = document.getElementById(context + "-live-transcript");
   if (liveEl) { liveEl.style.display = "block"; liveEl.textContent = "Summarizing\u2026"; }
@@ -8281,8 +8321,8 @@ async function appendTranscriptToNotes(context, transcript, recordingLabel) {
   }
 
   textarea.value = (textarea.value ? textarea.value.replace(/\s+$/, "") + "\n\n" : "") + heading + "\n" + bodyText;
-  if (context === "meeting") await saveMeetingDetailNotes();
-  else await saveSourcingDetailNotes();
+  if (context === "meeting") await saveMeetingTranscriptNotes();
+  else await saveSourcingTranscriptNotes();
 
   if (liveEl) { liveEl.style.display = "none"; liveEl.textContent = ""; }
 }
@@ -8346,7 +8386,7 @@ function renderAudioRecordingsList(context) {
         '<div class="meeting-row-sub">' + mins + ':' + secs + ' &middot; ' + escapeHtml(r.timestamp) + transcriptNote + '</div>' +
       '</div>' +
     '</div>';
-  }).join("") + '<div class="field-hint" style="margin-top:8px;">Each session is transcribed live, then summarized by AI straight into Notes below \u2014 give it a quick read-through, since neither speech recognition nor the summary is perfect, especially for product names.</div>';
+  }).join("") + '<div class="field-hint" style="margin-top:8px;">Each session is transcribed live, then summarized by AI straight into the Transcript &amp; Summary box below \u2014 give it a quick read-through, since neither speech recognition nor the summary is perfect, especially for product names.</div>';
 }
 
 // ---------------------------------------------------------------
@@ -8633,6 +8673,7 @@ async function renderSourcingDetail(sourcingId) {
       (sourcing.status === "finalized" ? ' &middot; Finalized ' + escapeHtml(sourcing.finalizedDate || "") : "") +
     '</div>';
   document.getElementById("sourcing-detail-notes").value = sourcing.notes || "";
+  document.getElementById("sourcing-transcript-notes").value = sourcing.transcriptNotes || "";
 
   const finalizeBtn = document.getElementById("sourcing-finalize-btn");
   finalizeBtn.textContent = sourcing.status === "active" ? "Finalize sourcing" : "Reopen sourcing";
@@ -8697,6 +8738,15 @@ async function saveSourcingDetailNotes() {
   await saveSourcingList(list);
 }
 
+async function saveSourcingTranscriptNotes() {
+  if (!currentSourcingDetailId) return;
+  const list = await getSourcingList();
+  const sourcing = list.find(function(s) { return s.id === currentSourcingDetailId; });
+  if (!sourcing) return;
+  sourcing.transcriptNotes = document.getElementById("sourcing-transcript-notes").value;
+  await saveSourcingList(list);
+}
+
 async function toggleSourcingFinalized() {
   if (!currentSourcingDetailId) return;
   const list = await getSourcingList();
@@ -8748,6 +8798,10 @@ async function downloadSourcingSummary() {
   lines.push("NOTES");
   lines.push("-".repeat(40));
   lines.push(sourcing.notes || "(none)");
+  lines.push("");
+  lines.push("AI TRANSCRIPT & SUMMARY");
+  lines.push("-".repeat(40));
+  lines.push(sourcing.transcriptNotes || "(none)");
   lines.push("");
   lines.push("QUOTES FROM THIS SOURCING (" + sourcingQuotes.length + ")");
   lines.push("-".repeat(40));
