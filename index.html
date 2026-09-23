@@ -5170,6 +5170,18 @@ async function downloadMeetingSummary() {
   lines.push("-".repeat(40));
   lines.push(meeting.transcriptNotes || "(none)");
   lines.push("");
+  lines.push("RAW TRANSCRIPT(S) -- before AI summarization");
+  lines.push("-".repeat(40));
+  if (meeting.rawTranscripts && meeting.rawTranscripts.length > 0) {
+    meeting.rawTranscripts.forEach(function(r) {
+      lines.push(r.label + ":");
+      lines.push(r.text);
+      lines.push("");
+    });
+  } else {
+    lines.push("(none)");
+  }
+  lines.push("");
   lines.push("QUOTES IN THIS MEETING (" + meetingQuotes.length + ")");
   lines.push("-".repeat(40));
   if (meetingQuotes.length === 0) {
@@ -8365,6 +8377,14 @@ async function appendTranscriptToNotes(context, transcript, recordingLabel) {
   const liveEl = document.getElementById(context + "-live-transcript");
   if (liveEl) { liveEl.style.display = "block"; liveEl.textContent = "Summarizing\u2026"; }
 
+  // The raw transcript gets saved alongside the summary (not shown in this
+  // box day to day, since replacing it there with the clean summary is
+  // what's actually wanted) -- but if the AI ever says a transcript was
+  // "too unclear," there needs to be a way to check whether that was true.
+  // Without this, the evidence disappears the moment the summary replaces
+  // it, and neither of us can tell a bad summary from bad input.
+  await saveRawTranscript(context, recordingLabel, transcript);
+
   let heading = "\u2014\u2014\u2014 Summary (" + recordingLabel + ") \u2014\u2014\u2014";
   let bodyText = transcript;
   try {
@@ -8383,6 +8403,28 @@ async function appendTranscriptToNotes(context, transcript, recordingLabel) {
   else await saveSourcingTranscriptNotes();
 
   if (liveEl) { liveEl.style.display = "none"; liveEl.textContent = ""; }
+}
+
+async function saveRawTranscript(context, recordingLabel, transcript) {
+  try {
+    if (context === "meeting") {
+      const meetings = await getMeetings();
+      const meeting = meetings.find(function(m) { return m.id === currentMeetingDetailId; });
+      if (!meeting) return;
+      meeting.rawTranscripts = meeting.rawTranscripts || [];
+      meeting.rawTranscripts.push({ label: recordingLabel, text: transcript });
+      await saveMeetings(meetings);
+    } else {
+      const list = await getSourcingList();
+      const sourcing = list.find(function(s) { return s.id === currentSourcingDetailId; });
+      if (!sourcing) return;
+      sourcing.rawTranscripts = sourcing.rawTranscripts || [];
+      sourcing.rawTranscripts.push({ label: recordingLabel, text: transcript });
+      await saveSourcingList(list);
+    }
+  } catch (e) {
+    console.error("saveRawTranscript failed:", e);
+  }
 }
 
 async function startAudioRecording(context) {
@@ -8860,6 +8902,18 @@ async function downloadSourcingSummary() {
   lines.push("AI TRANSCRIPT & SUMMARY");
   lines.push("-".repeat(40));
   lines.push(sourcing.transcriptNotes || "(none)");
+  lines.push("");
+  lines.push("RAW TRANSCRIPT(S) -- before AI summarization");
+  lines.push("-".repeat(40));
+  if (sourcing.rawTranscripts && sourcing.rawTranscripts.length > 0) {
+    sourcing.rawTranscripts.forEach(function(r) {
+      lines.push(r.label + ":");
+      lines.push(r.text);
+      lines.push("");
+    });
+  } else {
+    lines.push("(none)");
+  }
   lines.push("");
   lines.push("QUOTES FROM THIS SOURCING (" + sourcingQuotes.length + ")");
   lines.push("-".repeat(40));
