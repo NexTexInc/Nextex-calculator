@@ -8148,12 +8148,20 @@ async function toggleAudioRecording(context) {
 
 function startLiveTranscription(context) {
   const Ctor = getSpeechRecognitionCtor();
-  if (!Ctor) return; // not supported in this browser -- recording still works, just no live transcript
+  const liveEl = document.getElementById(context + "-live-transcript");
+  if (!Ctor) {
+    // Silently doing nothing here meant someone could talk for a full
+    // recording with zero indication live transcription was never even
+    // going to run -- surfacing it immediately is much better than a
+    // toast only after the fact, or (worse) no feedback at all.
+    if (liveEl) { liveEl.style.display = "block"; liveEl.textContent = "Live transcription isn't available in this browser/app \u2014 the audio recording itself will still work fine."; }
+    showToast("Live transcription isn't supported here \u2014 recording audio only.", "error");
+    return;
+  }
   const state = audioRecorderState[context];
   state.transcriptFinal = "";
   state.stoppingDeliberately = false;
 
-  const liveEl = document.getElementById(context + "-live-transcript");
   if (liveEl) { liveEl.style.display = "block"; liveEl.textContent = "Listening\u2026"; }
 
   function attachAndStart() {
@@ -8176,9 +8184,19 @@ function startLiveTranscription(context) {
     };
 
     recognition.onerror = function(e) {
-      // no-speech / aborted happen naturally during pauses and on our own
-      // deliberate stop -- not real failures, onend's restart logic (or
-      // the deliberate-stop flag) already handles both correctly.
+      // no-speech and aborted happen naturally during pauses and on our
+      // own deliberate stop -- not real failures, onend's restart logic
+      // (or the deliberate-stop flag) already handles both correctly.
+      if (e.error === "no-speech" || e.error === "aborted") return;
+      console.error("SpeechRecognition error:", e.error);
+      // These mean recognition genuinely isn't going to work this session
+      // -- worth telling the user immediately rather than letting 20
+      // seconds of talking silently produce nothing with no explanation.
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+        showToast("Speech recognition was blocked or denied \u2014 the recording itself still works, but live transcription won't.", "error");
+      } else if (e.error === "network" || e.error === "audio-capture") {
+        showToast("Speech recognition hit a " + e.error + " error and may not capture this recording.", "error");
+      }
     };
 
     recognition.onend = function() {
@@ -8252,7 +8270,10 @@ async function summarizeTranscript(transcript) {
 // with a clear note explaining why, so a failed summary never just loses
 // the recording's content outright.
 async function appendTranscriptToNotes(context, transcript, recordingLabel) {
-  if (!transcript) return;
+  if (!transcript) {
+    showToast("No speech was captured for that recording \u2014 the audio itself still saved, but nothing was added to Notes.", "error");
+    return;
+  }
   const textarea = document.getElementById(context + "-detail-notes");
   if (!textarea) return;
   const liveEl = document.getElementById(context + "-live-transcript");
