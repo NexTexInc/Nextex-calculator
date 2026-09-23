@@ -2663,8 +2663,8 @@
       <input type="file" id="meeting-photo-input-gallery" accept="image/*" multiple style="display:none;" onchange="handleSessionPhotoSelected(event, 'meeting')">
       <div id="meeting-detail-photos"></div>
 
-      <p class="section-label" style="margin-top:20px;">Audio recording</p>
-      <button type="button" class="audio-record-btn" id="meeting-record-btn" onclick="toggleAudioRecording('meeting')">&#9679; Start Recording</button>
+      <p class="section-label" style="margin-top:20px;">AI transcription</p>
+      <button type="button" class="audio-record-btn" id="meeting-record-btn" onclick="toggleAudioRecording('meeting')">&#9679; Start Transcribing</button>
       <div class="audio-timer" id="meeting-audio-timer" style="display:none;">00:00</div>
       <div class="field-hint" id="meeting-live-transcript" style="display:none; margin-top:6px; max-height:80px; overflow-y:auto;"></div>
       <div id="meeting-audio-list"></div>
@@ -2780,8 +2780,8 @@
       <input type="file" id="sourcing-photo-input-gallery" accept="image/*" multiple style="display:none;" onchange="handleSessionPhotoSelected(event, 'sourcing')">
       <div id="sourcing-detail-photos"></div>
 
-      <p class="section-label" style="margin-top:20px;">Audio recording</p>
-      <button type="button" class="audio-record-btn" id="sourcing-record-btn" onclick="toggleAudioRecording('sourcing')">&#9679; Start Recording</button>
+      <p class="section-label" style="margin-top:20px;">AI transcription</p>
+      <button type="button" class="audio-record-btn" id="sourcing-record-btn" onclick="toggleAudioRecording('sourcing')">&#9679; Start Transcribing</button>
       <div class="audio-timer" id="sourcing-audio-timer" style="display:none;">00:00</div>
       <div class="field-hint" id="sourcing-live-transcript" style="display:none; margin-top:6px; max-height:80px; overflow-y:auto;"></div>
       <div id="sourcing-audio-list"></div>
@@ -8081,13 +8081,20 @@ async function handleGalleryCameraCapture(event) {
 
 
 // ---------------------------------------------------------------
-// Audio recording (Meetings + Sourcing) -- recordings are never
-// written to persistent storage, only held in memory for the
-// current screen visit, then downloaded immediately on stop.
+// AI transcription (Meetings + Sourcing) -- live speech-to-text via
+// the browser's built-in Web Speech API, summarized by AI straight
+// into Notes on stop. An earlier version also ran a separate
+// MediaRecorder alongside this to save a downloadable audio file, but
+// the two compete for the microphone on some phones -- recognition
+// can end up "listening" the whole time while actually hearing
+// silence, since it doesn't share a mic feed with anything else, it
+// always opens its own. Dropping the audio-file capture removes that
+// conflict entirely; per how this is actually used (transcribed and
+// summarized notes, not an audio archive) the file wasn't needed.
 // ---------------------------------------------------------------
 const audioRecorderState = {
-  meeting: { recorder: null, stream: null, chunks: [], startTime: null, timerInterval: null, recordings: [], recognition: null, transcriptFinal: "", stoppingDeliberately: false },
-  sourcing: { recorder: null, stream: null, chunks: [], startTime: null, timerInterval: null, recordings: [], recognition: null, transcriptFinal: "", stoppingDeliberately: false }
+  meeting: { isRecording: false, startTime: null, timerInterval: null, recordings: [], recognition: null, transcriptFinal: "", stoppingDeliberately: false },
+  sourcing: { isRecording: false, startTime: null, timerInterval: null, recordings: [], recognition: null, transcriptFinal: "", stoppingDeliberately: false }
 };
 
 // Web Speech API (SpeechRecognition) is a free, built-in browser feature --
@@ -8106,7 +8113,7 @@ function resetAudioRecorderUI(context) {
   const state = audioRecorderState[context];
   if (state.timerInterval) clearInterval(state.timerInterval);
   const btn = document.getElementById(context + "-record-btn");
-  if (btn) { btn.textContent = "\u25CF Start Recording"; btn.classList.remove("recording"); }
+  if (btn) { btn.textContent = "\u25CF Start Transcribing"; btn.classList.remove("recording"); }
   const timerEl = document.getElementById(context + "-audio-timer");
   if (timerEl) timerEl.style.display = "none";
   const liveEl = document.getElementById(context + "-live-transcript");
@@ -8115,31 +8122,22 @@ function resetAudioRecorderUI(context) {
 
 function resetAudioRecordingSession(context) {
   const state = audioRecorderState[context];
-  if (state.recorder && state.recorder.state === "recording") {
-    state.recorder.onstop = null; // don't auto-download a recording we're discarding on navigation
-    state.recorder.stop();
-  }
+  state.isRecording = false;
   if (state.recognition) {
     state.stoppingDeliberately = true;
     try { state.recognition.stop(); } catch (e) {}
   }
-  if (state.stream) {
-    state.stream.getTracks().forEach(function(t) { t.stop(); });
-  }
   resetAudioRecorderUI(context);
-  state.recorder = null;
-  state.stream = null;
-  state.chunks = [];
-  state.recordings = [];
   state.recognition = null;
   state.transcriptFinal = "";
+  state.recordings = [];
   const listEl = document.getElementById(context + "-audio-list");
   if (listEl) listEl.innerHTML = "";
 }
 
 async function toggleAudioRecording(context) {
   const state = audioRecorderState[context];
-  if (state.recorder && state.recorder.state === "recording") {
+  if (state.isRecording) {
     stopAudioRecording(context);
   } else {
     await startAudioRecording(context);
@@ -8149,15 +8147,6 @@ async function toggleAudioRecording(context) {
 function startLiveTranscription(context) {
   const Ctor = getSpeechRecognitionCtor();
   const liveEl = document.getElementById(context + "-live-transcript");
-  if (!Ctor) {
-    // Silently doing nothing here meant someone could talk for a full
-    // recording with zero indication live transcription was never even
-    // going to run -- surfacing it immediately is much better than a
-    // toast only after the fact, or (worse) no feedback at all.
-    if (liveEl) { liveEl.style.display = "block"; liveEl.textContent = "Live transcription isn't available in this browser/app \u2014 the audio recording itself will still work fine."; }
-    showToast("Live transcription isn't supported here \u2014 recording audio only.", "error");
-    return;
-  }
   const state = audioRecorderState[context];
   state.transcriptFinal = "";
   state.stoppingDeliberately = false;
@@ -8193,15 +8182,14 @@ function startLiveTranscription(context) {
       // -- worth telling the user immediately rather than letting 20
       // seconds of talking silently produce nothing with no explanation.
       if (e.error === "not-allowed" || e.error === "service-not-allowed") {
-        showToast("Speech recognition was blocked or denied \u2014 the recording itself still works, but live transcription won't.", "error");
+        showToast("Microphone access is blocked for this site \u2014 open your browser's site permissions (not your phone's app settings) and allow the microphone, then try again.", "error");
       } else if (e.error === "network" || e.error === "audio-capture") {
-        showToast("Speech recognition hit a " + e.error + " error and may not capture this recording.", "error");
+        showToast("Speech recognition hit a " + e.error + " error and may not capture this session.", "error");
       }
     };
 
     recognition.onend = function() {
-      const stillRecording = state.recorder && state.recorder.state === "recording";
-      if (stillRecording && !state.stoppingDeliberately) {
+      if (state.isRecording && !state.stoppingDeliberately) {
         // Chrome ends a recognition session after a period of silence even
         // mid-recording -- restart it seamlessly so a longer meeting with
         // natural pauses doesn't just quietly stop transcribing partway through.
@@ -8271,7 +8259,7 @@ async function summarizeTranscript(transcript) {
 // the recording's content outright.
 async function appendTranscriptToNotes(context, transcript, recordingLabel) {
   if (!transcript) {
-    showToast("No speech was captured for that recording \u2014 the audio itself still saved, but nothing was added to Notes.", "error");
+    showToast("No speech was captured for that session \u2014 nothing was added to Notes.", "error");
     return;
   }
   const textarea = document.getElementById(context + "-detail-notes");
@@ -8301,72 +8289,41 @@ async function appendTranscriptToNotes(context, transcript, recordingLabel) {
 
 async function startAudioRecording(context) {
   const state = audioRecorderState[context];
-  if (typeof navigator.mediaDevices === "undefined" || !navigator.mediaDevices.getUserMedia) {
-    showToast("Audio recording isn't supported in this browser.", "error");
+  const Ctor = getSpeechRecognitionCtor();
+  if (!Ctor) {
+    showToast("Live transcription isn't supported in this browser, so this feature isn't available here.", "error");
     return;
   }
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    state.stream = stream;
-    state.chunks = [];
-    const mimeType = (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported("audio/webm"))
-      ? "audio/webm" : "";
-    state.recorder = mimeType ? new MediaRecorder(stream, { mimeType: mimeType }) : new MediaRecorder(stream);
 
-    state.recorder.ondataavailable = function(e) {
-      if (e.data && e.data.size > 0) state.chunks.push(e.data);
-    };
-    state.recorder.onstop = function() {
-      const blob = new Blob(state.chunks, { type: state.recorder.mimeType || "audio/webm" });
-      const durationSec = Math.max(1, Math.round((Date.now() - state.startTime) / 1000));
-      const transcript = stopLiveTranscription(context);
-      const recordingLabel = "Recording " + (state.recordings.length + 1);
-      state.recordings.push({ blob: blob, duration: durationSec, timestamp: new Date().toLocaleTimeString(), transcript: transcript || "" });
-      state.stream.getTracks().forEach(function(t) { t.stop(); });
-      renderAudioRecordingsList(context);
-      downloadAudioRecording(context, state.recordings.length - 1);
-      if (transcript) appendTranscriptToNotes(context, transcript, recordingLabel);
-    };
+  state.isRecording = true;
+  state.startTime = Date.now();
+  startLiveTranscription(context);
 
-    state.recorder.start();
-    state.startTime = Date.now();
-    startLiveTranscription(context);
-
-    const btn = document.getElementById(context + "-record-btn");
-    btn.textContent = "\u25A0 Stop Recording";
-    btn.classList.add("recording");
-    const timerEl = document.getElementById(context + "-audio-timer");
-    timerEl.textContent = "00:00";
-    timerEl.style.display = "block";
-    state.timerInterval = setInterval(function() {
-      const elapsed = Math.round((Date.now() - state.startTime) / 1000);
-      const mins = String(Math.floor(elapsed / 60)).padStart(2, "0");
-      const secs = String(elapsed % 60).padStart(2, "0");
-      timerEl.textContent = mins + ":" + secs;
-    }, 500);
-  } catch (e) {
-    // This is a browser-level permission tied to this website's address,
-    // not a phone app permission -- there's no entry for it in the
-    // phone's own Settings > Apps list, which is exactly where someone
-    // would naturally look first and come up empty. NotAllowedError
-    // means it was actually blocked (the fixable case); other errors
-    // (no mic hardware, mic in use elsewhere, etc.) get a plainer message.
-    if (e.name === "NotAllowedError" || e.name === "PermissionDeniedError") {
-      showToast("Microphone access is blocked for this site. In your browser (not your phone's app settings), open this page's site info/permissions and allow the microphone, then try again.", "error");
-    } else if (e.name === "NotFoundError" || e.name === "DevicesNotFoundError") {
-      showToast("No microphone was found on this device.", "error");
-    } else {
-      showToast("Could not access the microphone. It may be in use by another app.", "error");
-    }
-  }
+  const btn = document.getElementById(context + "-record-btn");
+  btn.textContent = "\u25A0 Stop Transcribing";
+  btn.classList.add("recording");
+  const timerEl = document.getElementById(context + "-audio-timer");
+  timerEl.textContent = "00:00";
+  timerEl.style.display = "block";
+  state.timerInterval = setInterval(function() {
+    const elapsed = Math.round((Date.now() - state.startTime) / 1000);
+    const mins = String(Math.floor(elapsed / 60)).padStart(2, "0");
+    const secs = String(elapsed % 60).padStart(2, "0");
+    timerEl.textContent = mins + ":" + secs;
+  }, 500);
 }
 
 function stopAudioRecording(context) {
   const state = audioRecorderState[context];
-  if (state.recorder && state.recorder.state === "recording") {
-    state.recorder.stop();
-  }
+  if (!state.isRecording) return;
+  state.isRecording = false;
+  const durationSec = Math.max(1, Math.round((Date.now() - state.startTime) / 1000));
+  const transcript = stopLiveTranscription(context);
+  const recordingLabel = "Transcript " + (state.recordings.length + 1);
+  state.recordings.push({ duration: durationSec, timestamp: new Date().toLocaleTimeString(), transcript: transcript || "" });
   resetAudioRecorderUI(context);
+  renderAudioRecordingsList(context);
+  appendTranscriptToNotes(context, transcript, recordingLabel);
 }
 
 function renderAudioRecordingsList(context) {
@@ -8377,40 +8334,19 @@ function renderAudioRecordingsList(context) {
     container.innerHTML = "";
     return;
   }
-  const supportsLiveTranscription = !!getSpeechRecognitionCtor();
   container.innerHTML = state.recordings.map(function(r, i) {
     const mins = String(Math.floor(r.duration / 60)).padStart(2, "0");
     const secs = String(r.duration % 60).padStart(2, "0");
-    const transcriptNote = r.transcript ? ' &middot; <span style="color:var(--green);">Summarized to Notes</span>' : "";
+    const transcriptNote = r.transcript
+      ? ' &middot; <span style="color:var(--green);">Summarized to Notes</span>'
+      : ' &middot; <span style="color:var(--rust);">No speech captured</span>';
     return '<div class="meeting-row">' +
       '<div class="meeting-row-info">' +
-        '<div class="meeting-row-name">Recording ' + (i + 1) + '</div>' +
+        '<div class="meeting-row-name">Transcript ' + (i + 1) + '</div>' +
         '<div class="meeting-row-sub">' + mins + ':' + secs + ' &middot; ' + escapeHtml(r.timestamp) + transcriptNote + '</div>' +
       '</div>' +
-      '<button type="button" class="cq-back-btn" onclick="downloadAudioRecording(\'' + context + '\', ' + i + ')">Download</button>' +
     '</div>';
-  }).join("") + '<div class="field-hint" style="margin-top:8px;">' + (supportsLiveTranscription
-    ? 'Each recording is auto-transcribed live, then summarized by AI straight into Notes below \u2014 give it a quick read-through, since neither speech recognition nor the summary is perfect, especially for product names. The audio itself isn\u2019t saved permanently, so download it too if you want the original.'
-    : 'This browser doesn\u2019t support live transcription, so recordings aren\u2019t saved permanently \u2014 download each one before leaving this screen.') + '</div>';
-}
-
-function downloadAudioRecording(context, index) {
-  const state = audioRecorderState[context];
-  const r = state.recordings[index];
-  if (!r) return;
-  const url = URL.createObjectURL(r.blob);
-  const titleEl = document.getElementById(context + "-detail-title");
-  const nameLabel = (titleEl && titleEl.textContent) ? titleEl.textContent : context;
-  const safeName = nameLabel.replace(/[^a-z0-9\-_]/gi, "_");
-  const ext = (r.blob.type.indexOf("webm") !== -1) ? "webm" : "m4a";
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = safeName + "_recording_" + (index + 1) + "." + ext;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-  showToast("Downloading recording\u2026", "success");
+  }).join("") + '<div class="field-hint" style="margin-top:8px;">Each session is transcribed live, then summarized by AI straight into Notes below \u2014 give it a quick read-through, since neither speech recognition nor the summary is perfect, especially for product names.</div>';
 }
 
 // ---------------------------------------------------------------
