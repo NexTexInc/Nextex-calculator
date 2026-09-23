@@ -8206,12 +8206,29 @@ function startLiveTranscription(context) {
       // goes. Each attempt lands as its own "final" entry in
       // event.results, so a plain concatenation reads as that passage
       // repeated back to back. A strict character-for-character prefix
-      // check only catches the first shape; comparing the opening few
-      // words of consecutive segments catches the second one too, since
-      // two independent attempts at the same audio reliably start the
-      // same way even if they later diverge.
-      function openingWords(text, n) {
-        return text.trim().toLowerCase().split(/\s+/).slice(0, n).join(" ");
+      // check only catches the first shape; comparing the opening words
+      // of consecutive segments catches the second one too, since two
+      // independent attempts at the same audio reliably start the same
+      // way even if they later diverge.
+      //
+      // That opening-words check needs to be conservative, though: formal
+      // or repetitive speech (meeting minutes, presentations) often
+      // reuses the same stock opener ("the council will...") across
+      // genuinely different sentences. Requiring a longer shared opening
+      // AND that it makes up a large share of the shorter segment's total
+      // length means a brief recurring opener on an otherwise-different,
+      // substantial sentence no longer gets mistaken for a duplicate and
+      // silently dropped -- only two segments that are mostly the same
+      // utterance get collapsed.
+      function sharedPrefixWordCount(a, b) {
+        const wordsA = a.trim().toLowerCase().split(/\s+/);
+        const wordsB = b.trim().toLowerCase().split(/\s+/);
+        let i = 0;
+        while (i < wordsA.length && i < wordsB.length && wordsA[i] === wordsB[i]) i++;
+        return i;
+      }
+      function wordCount(text) {
+        return text.trim().split(/\s+/).filter(Boolean).length;
       }
       const finalSegments = [];
       let interim = "";
@@ -8222,7 +8239,21 @@ function startLiveTranscription(context) {
           if (!trimmed) continue;
           const last = finalSegments[finalSegments.length - 1];
           const isPrefixMatch = last && (trimmed.indexOf(last) === 0 || last.indexOf(trimmed) === 0);
-          const isSameOpening = last && openingWords(trimmed, 6) === openingWords(last, 6) && openingWords(last, 6).split(" ").length >= 4;
+          let isSameOpening = false;
+          if (last && !isPrefixMatch) {
+            // Measure how far the match ACTUALLY extends, rather than
+            // checking a fixed window and assuming that's the whole
+            // overlap -- a fixed check undercounts long shared openings
+            // badly (10 matching words out of a 75-word sentence reads as
+            // only 13% shared even when the real overlap runs to 65+
+            // words), which let real duplicates slip through uncollapsed.
+            const sharedCount = sharedPrefixWordCount(trimmed, last);
+            const minRequiredWords = 8; // avoid firing on a short coincidental opener
+            if (sharedCount >= minRequiredWords) {
+              const shorterWordCount = Math.min(wordCount(trimmed), wordCount(last));
+              isSameOpening = (sharedCount / shorterWordCount) >= 0.4;
+            }
+          }
           if (isPrefixMatch || isSameOpening) {
             // Same utterance being re-recognized -- keep whichever attempt
             // is longer (usually the later, more complete/refined one).
