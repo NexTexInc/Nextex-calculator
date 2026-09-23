@@ -4492,6 +4492,18 @@ function parseSummaryTextToDocxParagraphs(text) {
       paragraphs.push(new D.Paragraph({ spacing: { before: 160 } }));
       return;
     }
+    // The model's own throat-clearing boilerplate -- an opening line
+    // like "Here is a summary of the transcript:" and closing filler
+    // like "No clear decisions were made/mentioned..." when nothing was
+    // decided. Neither adds anything for a reader of the finished recap
+    // (an absence of decisions is already implied by no Decisions being
+    // listed), so both are dropped entirely rather than rendered.
+    if (/^here('s| is) (a |the )?(quick |brief )?(summary|recap) of (the |this )?(transcript|meeting|call|recording|conversation)\b/i.test(line)) {
+      return;
+    }
+    if (/no (clear |specific )?decisions?\s+(were|was|appear(ed)?|seem(ed)?)\s+(to be )?(made|mentioned|identified|agreed|reached|taken)/i.test(line)) {
+      return;
+    }
     // A whole line that's just "**Some Header:**"
     const wholeBoldMatch = line.match(/^\*\*(.+?)\*\*:?\s*$/);
     if (wholeBoldMatch) {
@@ -4565,29 +4577,33 @@ async function buildSummaryDocxBlob(config) {
   }
 
   // ---------------------------------------------------------------
-  // Hero header: a two-panel navy block -- eyebrow label, the meeting/
-  // sourcing name as a large title, an optional subtitle (customer, for
-  // meetings), and a date/category line on the left; the NexTex logo
-  // and a status badge on the right. This is the actual app's branding,
-  // not a generic "MEETING SUMMARY" label.
+  // Hero header: previously a full navy block, which sat directly under
+  // the navy page-header banner and read as one washed-out navy mass
+  // with no separation between them. Now: white/light left panel with
+  // bold navy (all-caps) title and rust accents for real contrast, navy
+  // kept only on the narrower right panel where the light-colored logo
+  // actually needs a dark background to read properly.
   // ---------------------------------------------------------------
   const heroLeftWidth = 6560;
   const heroRightWidth = contentWidth - heroLeftWidth;
   const heroLeftChildren = [
-    new D.Paragraph({ children: [new D.TextRun({ text: config.eyebrow, bold: true, color: DOCX_BRAND.terracotta, size: 18 })], spacing: { after: 140 } }),
-    new D.Paragraph({ children: [new D.TextRun({ text: config.name, bold: true, color: "FFFFFF", size: 44 })], spacing: { after: 60 } })
+    new D.Paragraph({ children: [new D.TextRun({ text: config.eyebrow, bold: true, color: DOCX_BRAND.rust, size: 18 })], spacing: { after: 140 } }),
+    new D.Paragraph({ children: [new D.TextRun({ text: config.name.toUpperCase(), bold: true, color: DOCX_BRAND.navy, size: 44 })], spacing: { after: 60 } })
   ];
   if (config.subtitle) {
-    heroLeftChildren.push(new D.Paragraph({ children: [new D.TextRun({ text: config.subtitle.toUpperCase(), bold: true, color: DOCX_BRAND.terracotta, size: 24 })], spacing: { after: 140 } }));
+    heroLeftChildren.push(new D.Paragraph({ children: [new D.TextRun({ text: config.subtitle.toUpperCase(), bold: true, color: DOCX_BRAND.terracottaDark, size: 24 })], spacing: { after: 140 } }));
   }
-  heroLeftChildren.push(new D.Paragraph({ children: [new D.TextRun({ text: config.dateCategoryLine, color: "C7D0DA", size: 18 })] }));
+  heroLeftChildren.push(new D.Paragraph({
+    children: [new D.TextRun({ text: config.dateCategoryLine, color: "777777", size: 18 })],
+    border: { bottom: { style: D.BorderStyle.SINGLE, size: 4, color: DOCX_BRAND.terracotta, space: 12 } }
+  }));
 
   const heroTable = new D.Table({
     rows: [new D.TableRow({
       children: [
         new D.TableCell({
           width: { size: heroLeftWidth, type: D.WidthType.DXA },
-          shading: { type: D.ShadingType.CLEAR, fill: DOCX_BRAND.navy },
+          verticalAlign: D.VerticalAlign.CENTER,
           margins: { top: 320, bottom: 320, left: 320, right: 200 },
           children: heroLeftChildren
         }),
@@ -4684,8 +4700,10 @@ async function buildSummaryDocxBlob(config) {
     children.push(new D.Paragraph({ spacing: { after: 160 } }));
   }
 
-  // AI Transcript & Summary
-  pushSectionHeading(nextNum(), "AI Summary");
+  // Summary (the AI-generated recap, presented simply as a summary --
+  // not flagged as "AI" throughout, since this is meant to read as the
+  // meeting recap itself, not a labeled AI output)
+  pushSectionHeading(nextNum(), "Summary");
   if (config.transcriptSummary) {
     parseSummaryTextToDocxParagraphs(config.transcriptSummary).forEach(function(p) { children.push(p); });
   } else {
@@ -4693,11 +4711,11 @@ async function buildSummaryDocxBlob(config) {
   }
   children.push(new D.Paragraph({ spacing: { after: 100 } }));
 
-  // Quotes table -- zebra-striped, navy header
-  pushSectionHeading(nextNum(), config.quotesSectionTitle);
-  if (config.quotes.length === 0) {
-    pushEmptyNote();
-  } else {
+  // Quotes table -- zebra-striped, navy header. Skipped entirely (no
+  // heading at all) when there are none, rather than showing "(none)" --
+  // these are situational, not core content every meeting has.
+  if (config.quotes.length > 0) {
+    pushSectionHeading(nextNum(), config.quotesSectionTitle);
     const quoteColWidths = [4160, 3200, 2000];
     const headerRow = new D.TableRow({
       children: ["Item", "Vendor", "Price"].map(function(h, i) {
@@ -4718,14 +4736,12 @@ async function buildSummaryDocxBlob(config) {
       });
     });
     children.push(new D.Table({ rows: [headerRow].concat(rows), columnWidths: quoteColWidths, width: { size: contentWidth, type: D.WidthType.DXA }, borders: noBorderSet }));
+    children.push(new D.Paragraph({ spacing: { after: 100 } }));
   }
-  children.push(new D.Paragraph({ spacing: { after: 100 } }));
 
-  // Customer quote items table -- same zebra treatment
-  pushSectionHeading(nextNum(), config.cartSectionTitle);
-  if (config.cartItems.length === 0) {
-    pushEmptyNote();
-  } else {
+  // Customer quote items table -- same treatment, same skip-when-empty rule
+  if (config.cartItems.length > 0) {
+    pushSectionHeading(nextNum(), config.cartSectionTitle);
     const cartColWidths = [3160, 1900, 1300, 1500, 1500];
     const headerRow2 = new D.TableRow({
       children: ["Item", "Size", "Qty", "Unit Price", "Total"].map(function(h, i) {
@@ -4746,8 +4762,8 @@ async function buildSummaryDocxBlob(config) {
       });
     });
     children.push(new D.Table({ rows: [headerRow2].concat(rows2), columnWidths: cartColWidths, width: { size: contentWidth, type: D.WidthType.DXA }, borders: noBorderSet }));
+    children.push(new D.Paragraph({ spacing: { after: 100 } }));
   }
-  children.push(new D.Paragraph({ spacing: { after: 100 } }));
 
   if (config.extraListSection) {
     const items = config.extraListSection.items || [];
@@ -4873,7 +4889,7 @@ async function buildSummaryDocxBlob(config) {
 
   const doc = new D.Document({
     styles: {
-      default: { document: { run: { font: "Calibri", size: 22 } } }
+      default: { document: { run: { font: "Century Gothic", size: 22 } } }
     },
     sections: [{
       properties: {
