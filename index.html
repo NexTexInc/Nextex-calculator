@@ -1654,6 +1654,19 @@
     </div>
   </div>
 
+  <div id="design-name-gen-overlay" class="qr-code-overlay">
+    <div class="bulk-cush-card" onclick="event.stopPropagation();">
+      <div class="modal-title">Design Name Generator</div>
+      <div class="modal-subtitle">Pulled from US states, tropical spots, elegant global cities, US cities, US streets, and classic names. Existing design names are never suggested.</div>
+      <div class="chip-group" id="design-name-vibe-chips" style="margin-bottom:14px;"></div>
+      <div id="design-name-suggestions"></div>
+      <div class="field-row" style="gap:8px; margin-top:4px;">
+        <button type="button" class="btn btn-clear-partial" style="flex:1;" onclick="refreshDesignNameSuggestions()">\ud83d\udd00 Shuffle</button>
+        <button type="button" class="btn" style="flex:1; background:var(--border); color:var(--text-primary);" onclick="closeDesignNameGenerator()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <div id="bulk-cush-overlay" class="qr-code-overlay">
     <div class="bulk-cush-card" onclick="event.stopPropagation();">
       <div class="modal-title">Apply cushion fields to selected</div>
@@ -2906,7 +2919,10 @@
       </div>
       <div class="field">
         <label for="item-design-name">Design Name</label>
-        <input type="text" id="item-design-name" placeholder="Optional" oninput="updateItemDescriptionPreview(); handleDesignNameInput();">
+        <div class="field-row" style="gap:8px; align-items:flex-start;">
+          <input type="text" id="item-design-name" placeholder="Optional" style="flex:1;" oninput="updateItemDescriptionPreview(); handleDesignNameInput();">
+          <button type="button" class="btn" style="flex:none; padding:10px 14px; background:var(--terracotta); color:var(--navy-dark); font-weight:700; white-space:nowrap;" onclick="openDesignNameGenerator()">\ud83c\udfb2 Generate</button>
+        </div>
         <div class="field-hint" id="item-design-name-hint"></div>
       </div>
 
@@ -6919,6 +6935,102 @@ async function findDesignNumberByName(designName) {
   const items = await getItems();
   const match = items.find(function(it) { return (it.designName || "").trim().toLowerCase() === name; });
   return match ? match.designNumber : null;
+}
+
+// Design Name Generator -- curated name pools across the categories
+// Matthew names designs from (US states, tropical/beach spots, elegant
+// global cities, US cities, US streets, and classic girls'/boys' names).
+// "vibe" filters to one pool; "any" (the default) pools everything
+// together. Suggestions always exclude names already used on an
+// existing item, so a suggestion never accidentally collides with a
+// real design already in the system.
+const DESIGN_NAME_POOLS = {
+  states: ["Alabama", "Arizona", "Arkansas", "California", "Carolina", "Colorado", "Dakota", "Delaware", "Georgia", "Idaho", "Indiana", "Kansas", "Kentucky", "Louisiana", "Maine", "Maryland", "Michigan", "Minnesota", "Mississippi", "Missouri", "Montana", "Nevada", "Oregon", "Tennessee", "Texas", "Utah", "Vermont", "Virginia", "Wyoming"],
+  tropical: ["Bali", "Maui", "Capri", "Ibiza", "Tulum", "Zanzibar", "Santorini", "Maldives", "Fiji", "Seychelles", "Aruba", "Cabo", "Havana", "Phuket", "Waikiki", "Montego", "Bonaire", "Positano", "Amalfi", "Mykonos", "Malibu", "Sanibel", "Coronado", "Laguna", "Nassau", "Antigua", "Jamaica", "Belize", "Cozumel", "Palawan", "Langkawi", "Kauai", "Lanai", "Moorea", "Bimini"],
+  global: ["Paris", "Milan", "Geneva", "Vienna", "Florence", "Monaco", "Copenhagen", "Stockholm", "Prague", "Budapest", "Lisbon", "Seville", "Madrid", "Barcelona", "Dublin", "Edinburgh", "Amsterdam", "Brussels", "Zurich", "Salzburg", "Verona", "Venice", "Bruges", "Cannes", "Nice", "Marrakech", "Kyoto", "Reykjavik", "Helsinki", "Oslo", "Bath", "Cambridge"],
+  uscities: ["Savannah", "Charleston", "Nashville", "Austin", "Asheville", "Sedona", "Aspen", "Napa", "Carmel", "Santa Fe", "Newport", "Portland", "Charlottesville", "Annapolis", "Beaufort", "Nantucket", "Georgetown", "Monterey", "Jackson Hole", "Telluride", "Park City", "Bozeman", "Scottsdale", "Palm Springs", "Sonoma", "St. Augustine", "Key West", "Hilton Head", "Mackinac", "Tahoe", "Sausalito", "Bar Harbor", "Cape May", "Chatham"],
+  streets: ["Madison", "Lexington", "Bourbon", "Rodeo Drive", "Ocean Drive", "Bleecker", "Beacon Street", "Newbury", "Sunset Boulevard", "Melrose", "Magazine Street", "Royal Street", "Worth Avenue", "Collins Avenue", "Michigan Avenue", "Peachtree", "Congress Avenue", "Camp Street", "Union Street", "Chestnut Street", "Willow Lane", "Hudson Street", "Greenwich", "Spring Street", "Prince Street", "Mercer Street"],
+  girls: ["Adelaide", "Amelia", "Charlotte", "Eleanor", "Josephine", "Margot", "Genevieve", "Isabelle", "Camille", "Vivienne", "Beatrice", "Aurora", "Juliette", "Sylvie", "Clara", "Rosalind", "Penelope", "Cecilia", "Annabelle", "Marguerite", "Colette", "Odette", "Vera", "Iris", "Wren", "Hazel", "Willa", "Nora", "Elodie", "Simone", "Marisol", "Delphine", "Seraphina"],
+  boys: ["Theodore", "Sebastian", "Julian", "Atticus", "Oliver", "August", "Elliott", "Weston", "Lincoln", "Hudson", "Grayson", "Sterling", "Beckett", "Emerson", "Holden", "Nathaniel", "Everett", "Barrett", "Cassius", "Dashiell", "Forrest", "Griffin", "Harrison", "Jasper", "Knox", "Lawson", "Maxwell", "Preston", "Rhett", "Tobias", "Wilder", "Callum", "Desmond", "Ellison"]
+};
+const DESIGN_NAME_VIBE_LABELS = {
+  any: "Any", states: "US States", tropical: "Tropical / Beach", global: "Elegant Global",
+  uscities: "US Cities", streets: "US Streets", girls: "Girls' Names", boys: "Boys' Names"
+};
+let designNameGenVibe = "any";
+
+async function getUsedDesignNamesLower() {
+  const items = await getItems();
+  const used = {};
+  items.forEach(function(it) {
+    const n = (it.designName || "").trim().toLowerCase();
+    if (n) used[n] = true;
+  });
+  return used;
+}
+
+function poolForVibe(vibe) {
+  if (vibe === "any") {
+    return Object.keys(DESIGN_NAME_POOLS).reduce(function(all, k) { return all.concat(DESIGN_NAME_POOLS[k]); }, []);
+  }
+  return DESIGN_NAME_POOLS[vibe] || [];
+}
+
+async function openDesignNameGenerator() {
+  designNameGenVibe = "any";
+  renderDesignNameVibeChips();
+  await refreshDesignNameSuggestions();
+  document.getElementById("design-name-gen-overlay").classList.add("show");
+}
+
+function closeDesignNameGenerator() {
+  document.getElementById("design-name-gen-overlay").classList.remove("show");
+}
+
+function renderDesignNameVibeChips() {
+  const wrap = document.getElementById("design-name-vibe-chips");
+  wrap.innerHTML = Object.keys(DESIGN_NAME_VIBE_LABELS).map(function(key) {
+    const selected = key === designNameGenVibe ? " selected" : "";
+    return '<button type="button" class="chip' + selected + '" onclick="setDesignNameVibe(\'' + key + '\')">' + DESIGN_NAME_VIBE_LABELS[key] + "</button>";
+  }).join("");
+}
+
+async function setDesignNameVibe(vibe) {
+  designNameGenVibe = vibe;
+  renderDesignNameVibeChips();
+  await refreshDesignNameSuggestions();
+}
+
+async function refreshDesignNameSuggestions() {
+  const suggestionsEl = document.getElementById("design-name-suggestions");
+  suggestionsEl.innerHTML = '<div class="field-hint">Loading\u2026</div>';
+
+  const used = await getUsedDesignNamesLower();
+  const pool = poolForVibe(designNameGenVibe).filter(function(n) { return !used[n.toLowerCase()]; });
+
+  if (pool.length === 0) {
+    suggestionsEl.innerHTML = '<div class="field-hint">Every name in this category is already in use \u2014 try a different vibe.</div>';
+    return;
+  }
+
+  // Shuffle and take up to 5
+  const shuffled = pool.slice();
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = tmp;
+  }
+  const picks = shuffled.slice(0, 5);
+
+  suggestionsEl.innerHTML = picks.map(function(name) {
+    return '<button type="button" class="btn" style="width:100%; background:var(--border); color:var(--navy); margin-bottom:8px; font-weight:700;" data-name="' + escapeHtml(name) + '" onclick="selectGeneratedDesignName(this.dataset.name)">' + escapeHtml(name) + "</button>";
+  }).join("");
+}
+
+function selectGeneratedDesignName(name) {
+  document.getElementById("item-design-name").value = name;
+  updateItemDescriptionPreview();
+  handleDesignNameInput();
+  closeDesignNameGenerator();
 }
 
 let itemCreationSourceQuote = null;
