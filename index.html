@@ -1663,11 +1663,24 @@
     <div class="bulk-cush-card" onclick="event.stopPropagation();">
       <div class="modal-title">Design Name Generator</div>
       <div class="modal-subtitle" id="design-name-gen-subtitle">Pulled from US states, tropical spots, elegant global cities, US cities, US streets, and classic names. Existing design names are never suggested.</div>
-      <div class="chip-group" id="design-name-vibe-chips" style="margin-bottom:14px;"></div>
-      <div id="design-name-suggestions"></div>
-      <div class="field-row" style="gap:8px; margin-top:4px;">
-        <button type="button" class="btn btn-clear-partial" style="flex:1;" onclick="refreshDesignNameSuggestions()">🔀 Shuffle</button>
-        <button type="button" class="btn" style="flex:1; background:var(--border); color:var(--text-primary);" onclick="closeDesignNameGenerator()">Cancel</button>
+
+      <div class="chip-group" style="margin-bottom:14px;">
+        <button type="button" class="chip selected" id="design-name-tab-generate" onclick="switchDesignNameTab('generate')">Generate</button>
+        <button type="button" class="chip" id="design-name-tab-saved" onclick="switchDesignNameTab('saved')">Saved (<span id="design-name-saved-count">0</span>)</button>
+      </div>
+
+      <div id="design-name-generate-view">
+        <div class="chip-group" id="design-name-vibe-chips" style="margin-bottom:14px;"></div>
+        <div id="design-name-suggestions"></div>
+        <div class="field-row" style="gap:8px; margin-top:4px;">
+          <button type="button" class="btn btn-clear-partial" style="flex:1;" onclick="refreshDesignNameSuggestions()">🔀 Shuffle</button>
+          <button type="button" class="btn" style="flex:1; background:var(--border); color:var(--text-primary);" onclick="closeDesignNameGenerator()">Cancel</button>
+        </div>
+      </div>
+
+      <div id="design-name-saved-view" style="display:none;">
+        <div id="design-name-saved-list"></div>
+        <button type="button" class="btn" style="width:100%; background:var(--border); color:var(--text-primary); margin-top:4px;" onclick="closeDesignNameGenerator()">Close</button>
       </div>
     </div>
   </div>
@@ -6986,8 +6999,10 @@ let designNameGenContext = "item";
 async function openDesignNameGenerator(context) {
   designNameGenContext = context || "item";
   designNameGenVibe = "any";
+  switchDesignNameTab("generate");
   renderDesignNameVibeChips();
   await refreshDesignNameSuggestions();
+  await updateSavedDesignNameCount();
   document.getElementById("design-name-gen-subtitle").textContent = designNameGenContext === "standalone"
     ? "Pulled from US states, tropical spots, elegant global cities, US cities, US streets, and classic names. Tap a name to copy it. Existing design names are never suggested."
     : "Pulled from US states, tropical spots, elegant global cities, US cities, US streets, and classic names. Existing design names are never suggested.";
@@ -7005,6 +7020,20 @@ function openDesignNameGeneratorFromMenu() {
 
 function closeDesignNameGenerator() {
   document.getElementById("design-name-gen-overlay").classList.remove("show");
+}
+
+async function switchDesignNameTab(tab) {
+  document.getElementById("design-name-tab-generate").classList.toggle("selected", tab === "generate");
+  document.getElementById("design-name-tab-saved").classList.toggle("selected", tab === "saved");
+  document.getElementById("design-name-generate-view").style.display = tab === "generate" ? "block" : "none";
+  document.getElementById("design-name-saved-view").style.display = tab === "saved" ? "block" : "none";
+  if (tab === "saved") await renderSavedDesignNamesList();
+}
+
+async function updateSavedDesignNameCount() {
+  const saved = await getSavedDesignNames();
+  document.getElementById("design-name-saved-count").textContent = saved.length;
+  return saved;
 }
 
 function renderDesignNameVibeChips() {
@@ -7026,10 +7055,13 @@ async function refreshDesignNameSuggestions() {
   suggestionsEl.innerHTML = '<div class="field-hint">Loading\u2026</div>';
 
   const used = await getUsedDesignNamesLower();
-  const pool = poolForVibe(designNameGenVibe).filter(function(n) { return !used[n.toLowerCase()]; });
+  const saved = await getSavedDesignNames();
+  const reserved = {};
+  saved.forEach(function(s) { reserved[(s.name || "").trim().toLowerCase()] = true; });
+  const pool = poolForVibe(designNameGenVibe).filter(function(n) { return !used[n.toLowerCase()] && !reserved[n.toLowerCase()]; });
 
   if (pool.length === 0) {
-    suggestionsEl.innerHTML = '<div class="field-hint">Every name in this category is already in use \u2014 try a different vibe.</div>';
+    suggestionsEl.innerHTML = '<div class="field-hint">Every name in this category is already in use or saved \u2014 try a different vibe.</div>';
     return;
   }
 
@@ -7042,8 +7074,54 @@ async function refreshDesignNameSuggestions() {
   const picks = shuffled.slice(0, 5);
 
   suggestionsEl.innerHTML = picks.map(function(name) {
-    return '<button type="button" class="btn" style="width:100%; background:var(--border); color:var(--navy); margin-bottom:8px; font-weight:700;" data-name="' + escapeHtml(name) + '" onclick="selectGeneratedDesignName(this.dataset.name)">' + escapeHtml(name) + "</button>";
+    return '<div class="field-row" style="gap:6px; margin-bottom:8px;">' +
+      '<button type="button" class="btn" style="flex:1; background:var(--border); color:var(--navy); font-weight:700;" data-name="' + escapeHtml(name) + '" onclick="selectGeneratedDesignName(this.dataset.name)">' + escapeHtml(name) + '</button>' +
+      '<button type="button" class="btn" style="flex:none; padding:10px 14px; background:var(--terracotta); color:var(--navy-dark);" data-name="' + escapeHtml(name) + '" data-vibe="' + escapeHtml(designNameGenVibe) + '" onclick="event.stopPropagation(); saveGeneratedDesignName(this.dataset.name, this.dataset.vibe)" title="Save for later">\u2606</button>' +
+      '</div>';
   }).join("");
+}
+
+async function saveGeneratedDesignName(name, vibe) {
+  const ok = await addSavedDesignName(name, vibe);
+  if (ok) {
+    showToast("Saved \u201c" + name + "\u201d for later.", "success");
+    await updateSavedDesignNameCount();
+    await refreshDesignNameSuggestions(); // this name is now reserved -- drop it from fresh picks
+  } else {
+    showToast("Couldn't save that name \u2014 check your connection.", "error");
+  }
+}
+
+async function renderSavedDesignNamesList() {
+  const listEl = document.getElementById("design-name-saved-list");
+  listEl.innerHTML = '<div class="field-hint">Loading\u2026</div>';
+  const saved = await getSavedDesignNames();
+  document.getElementById("design-name-saved-count").textContent = saved.length;
+
+  if (saved.length === 0) {
+    listEl.innerHTML = '<div class="field-hint">No saved names yet \u2014 tap \u2606 next to a suggestion on the Generate tab to bank it here.</div>';
+    return;
+  }
+
+  listEl.innerHTML = saved.map(function(s) {
+    const name = s.name || "";
+    return '<div class="field-row" style="gap:6px; margin-bottom:8px;">' +
+      '<button type="button" class="btn" style="flex:1; background:var(--border); color:var(--navy); font-weight:700; text-align:left;" data-name="' + escapeHtml(name) + '" onclick="useSavedDesignName(this.dataset.name)">' + escapeHtml(name) + '</button>' +
+      '<button type="button" class="btn" style="flex:none; padding:10px 14px; background:var(--border); color:var(--text-secondary);" data-name="' + escapeHtml(name) + '" onclick="event.stopPropagation(); deleteSavedDesignName(this.dataset.name)" title="Remove">\ud83d\uddd1</button>' +
+      '</div>';
+  }).join("");
+}
+
+async function deleteSavedDesignName(name) {
+  await removeSavedDesignName(name);
+  await renderSavedDesignNamesList();
+  showToast("Removed \u201c" + name + "\u201d from saved names.", "success");
+}
+
+function useSavedDesignName(name) {
+  // Same context-aware behavior as picking a fresh suggestion: fill and
+  // close inside Item Creation, copy and stay open when browsing standalone.
+  selectGeneratedDesignName(name);
 }
 
 function selectGeneratedDesignName(name) {
@@ -7598,6 +7676,40 @@ async function openItemEdit(itemId) {
   updateItemDescriptionPreview();
 }
 
+// Saved Design Names -- a small bank of names picked ahead of time (via
+// the Save option in the generator) so they can be reused later without
+// re-rolling. Doc ID is the lowercased name itself, so saving the same
+// name twice just overwrites rather than duplicating.
+async function getSavedDesignNames() {
+  const snapshot = await db.collection("savedDesignNames").get();
+  return snapshot.docs.map(function(doc) { return Object.assign({ id: doc.id }, doc.data()); })
+    .sort(function(a, b) { return (b.savedAt || "").localeCompare(a.savedAt || ""); });
+}
+
+async function addSavedDesignName(name, vibe) {
+  try {
+    const id = name.trim().toLowerCase();
+    if (!id) return false;
+    await db.collection("savedDesignNames").doc(id).set({ name: name.trim(), vibe: vibe || "any", savedAt: new Date().toISOString() });
+    return true;
+  } catch (e) {
+    console.error("addSavedDesignName failed:", e);
+    return false;
+  }
+}
+
+async function removeSavedDesignName(name) {
+  try {
+    const id = (name || "").trim().toLowerCase();
+    if (!id) return false;
+    await db.collection("savedDesignNames").doc(id).delete();
+    return true;
+  } catch (e) {
+    console.error("removeSavedDesignName failed:", e);
+    return false;
+  }
+}
+
 async function saveItem() {
   if (itemEditingId) {
     const items = await getItems();
@@ -7630,6 +7742,7 @@ async function saveItem() {
     existing.description = buildItemDescription();
 
     await saveItems(items);
+    if (existing.designName) await removeSavedDesignName(existing.designName);
     showToast("Item " + existing.itemNumber + " updated.", "success");
     itemEditingId = null;
     closeItemCreation();
@@ -7711,6 +7824,7 @@ async function saveItem() {
   const items = await getItems();
   items.push(item);
   await saveItems(items);
+  if (item.designName) await removeSavedDesignName(item.designName);
 
   // Advance the next-item-number counter by incrementing the leading digits.
   const match = nextNum.match(/^(\d+)(.*)$/);
