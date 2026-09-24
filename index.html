@@ -1514,10 +1514,15 @@
       <button type="button" class="hamburger-submenu-item" onclick="openSavedRunListsScreen()">Saved Lists &#8594;</button>
     </div>
 
-    <button type="button" class="hamburger-menu-item" onclick="openMockupScreen()">
-      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5 9-5z"></path><path d="M3 13l9 5 9-5"></path></svg>
-      <span style="flex:1;">Mockup</span>
+    <button type="button" class="hamburger-menu-item" onclick="toggleHamburgerSubmenu('tools')">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
+      <span style="flex:1;">Tools</span>
+      <span class="hamburger-chevron" id="hamburger-chevron-tools">&#9662;</span>
     </button>
+    <div class="hamburger-submenu" id="hamburger-submenu-tools" style="display:none;">
+      <button type="button" class="hamburger-submenu-item" onclick="openMockupScreen()">Mockup</button>
+      <button type="button" class="hamburger-submenu-item" onclick="openDesignNameGeneratorFromMenu()">Name Generator</button>
+    </div>
     <button type="button" class="hamburger-menu-item" onclick="toggleHamburgerSubmenu('datatools')">
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 16.58A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 4 15.25"></path><polyline points="12 12 12 21"></polyline><polyline points="9 18 12 21 15 18"></polyline></svg>
       <span style="flex:1;">Data &amp; Storage Tools</span>
@@ -1657,11 +1662,11 @@
   <div id="design-name-gen-overlay" class="qr-code-overlay">
     <div class="bulk-cush-card" onclick="event.stopPropagation();">
       <div class="modal-title">Design Name Generator</div>
-      <div class="modal-subtitle">Pulled from US states, tropical spots, elegant global cities, US cities, US streets, and classic names. Existing design names are never suggested.</div>
+      <div class="modal-subtitle" id="design-name-gen-subtitle">Pulled from US states, tropical spots, elegant global cities, US cities, US streets, and classic names. Existing design names are never suggested.</div>
       <div class="chip-group" id="design-name-vibe-chips" style="margin-bottom:14px;"></div>
       <div id="design-name-suggestions"></div>
       <div class="field-row" style="gap:8px; margin-top:4px;">
-        <button type="button" class="btn btn-clear-partial" style="flex:1;" onclick="refreshDesignNameSuggestions()">\ud83d\udd00 Shuffle</button>
+        <button type="button" class="btn btn-clear-partial" style="flex:1;" onclick="refreshDesignNameSuggestions()">🔀 Shuffle</button>
         <button type="button" class="btn" style="flex:1; background:var(--border); color:var(--text-primary);" onclick="closeDesignNameGenerator()">Cancel</button>
       </div>
     </div>
@@ -2921,7 +2926,7 @@
         <label for="item-design-name">Design Name</label>
         <div class="field-row" style="gap:8px; align-items:flex-start;">
           <input type="text" id="item-design-name" placeholder="Optional" style="flex:1;" oninput="updateItemDescriptionPreview(); handleDesignNameInput();">
-          <button type="button" class="btn" style="flex:none; padding:10px 14px; background:var(--terracotta); color:var(--navy-dark); font-weight:700; white-space:nowrap;" onclick="openDesignNameGenerator()">\ud83c\udfb2 Generate</button>
+          <button type="button" class="btn" style="flex:none; padding:10px 14px; background:var(--terracotta); color:var(--navy-dark); font-weight:700; white-space:nowrap;" onclick="openDesignNameGenerator()">🎲 Generate</button>
         </div>
         <div class="field-hint" id="item-design-name-hint"></div>
       </div>
@@ -6976,11 +6981,26 @@ function poolForVibe(vibe) {
   return DESIGN_NAME_POOLS[vibe] || [];
 }
 
-async function openDesignNameGenerator() {
+let designNameGenContext = "item";
+
+async function openDesignNameGenerator(context) {
+  designNameGenContext = context || "item";
   designNameGenVibe = "any";
   renderDesignNameVibeChips();
   await refreshDesignNameSuggestions();
+  document.getElementById("design-name-gen-subtitle").textContent = designNameGenContext === "standalone"
+    ? "Pulled from US states, tropical spots, elegant global cities, US cities, US streets, and classic names. Tap a name to copy it. Existing design names are never suggested."
+    : "Pulled from US states, tropical spots, elegant global cities, US cities, US streets, and classic names. Existing design names are never suggested.";
   document.getElementById("design-name-gen-overlay").classList.add("show");
+}
+
+// Opens the generator from the Tools menu -- standalone, not tied to any
+// quote or the Item Creation screen, so picking a name copies it instead
+// of trying to fill a field that may not even be on screen right now.
+function openDesignNameGeneratorFromMenu() {
+  document.getElementById("hamburger-drawer").classList.remove("show");
+  document.getElementById("hamburger-backdrop").classList.remove("show");
+  openDesignNameGenerator("standalone");
 }
 
 function closeDesignNameGenerator() {
@@ -7027,6 +7047,18 @@ async function refreshDesignNameSuggestions() {
 }
 
 function selectGeneratedDesignName(name) {
+  if (designNameGenContext === "standalone") {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(name).then(function() {
+        showToast("Copied \u201c" + name + "\u201d to clipboard.", "success");
+      }).catch(function() {
+        showToast("Couldn't copy \u2014 the name was: " + name, "error");
+      });
+    } else {
+      showToast("The name was: " + name, "success");
+    }
+    return; // leave the generator open so they can keep browsing/copying
+  }
   document.getElementById("item-design-name").value = name;
   updateItemDescriptionPreview();
   handleDesignNameInput();
